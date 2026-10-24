@@ -481,6 +481,7 @@ $("#rec").onclick = async () => {
   catch { P.rec = new MediaRecorder(src); }
   $("#hookChip").style.display = "none";
   P.mime = P.rec.mimeType || P.mime || "video/mp4";
+  if (/opus|vp8|vp9|webm/i.test(P.mime)) toast("⚠️ Ce navigateur enregistre un son illisible sur iPhone : utilise Safari sur iPhone.", 6000);
   P.rec.ondataavailable = e => e.data.size && P.chunks.push(e.data);
   P.rec.onstop = () => {
     stopCompose(); P.blob = new Blob(P.chunks, { type: P.mime }); P.rec = null; P.run = false;
@@ -754,6 +755,7 @@ function renderFaceless(r, scenes, imgs, buf, onTick) {
     const stream = new MediaStream([...cv.captureStream(30).getVideoTracks(), ...dest.stream.getAudioTracks()]);
     try { FX.rec = new MediaRecorder(stream, FX.mime ? { mimeType: FX.mime, videoBitsPerSecond: 6_000_000 } : undefined); } catch { FX.rec = new MediaRecorder(stream); }
     FX.mime = FX.rec.mimeType || FX.mime || "video/mp4";
+    if (/opus|vp8|vp9|webm/i.test(FX.mime)) toast("⚠️ Ce navigateur enregistre un son illisible sur iPhone : utilise Safari sur iPhone.", 6000);
     FX.rec.ondataavailable = e => e.data.size && chunks.push(e.data);
     FX.rec.onstop = () => { FX.blob = new Blob(chunks, { type: FX.mime }); FX.rec ? resolve() : reject(new Error("montage interrompu")); FX.rec = null; };
     C.hook = (r.hook || "").trim(); C.ar = isAr(r);
