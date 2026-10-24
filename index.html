@@ -73,19 +73,23 @@ h1{font-size:22px;margin:0}
 #info .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--acc);margin-right:6px;animation:bl 1s infinite}
 @keyframes bl{50%{opacity:.2}}
 #review{display:none;gap:10px}
+#ptext{padding-top:52px;padding-bottom:60vh}
+.card .t{cursor:pointer}
+.links a{color:#8fb8ff;margin-right:10px;word-break:break-all}
 .hudtop{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:14px}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <h1>🎬 Studio</h1>
+    <div class="seg" id="tabs"><button data-t="shoot" class="on">🎬 À tourner</button><button data-t="track">📊 Suivi</button></div>
     <div class="seg" id="langSeg">
       <button data-l="all">Tout</button><button data-l="Francais">FR</button><button data-l="عربي">AR</button>
     </div>
   </header>
   <div id="msg"></div>
   <div id="list"></div>
+  <div id="track" hidden></div>
   <div class="queue" id="queue"></div>
 </div>
 
@@ -111,6 +115,7 @@ h1{font-size:22px;margin:0}
         <button id="fMinus" aria-label="Texte plus petit">A−</button>
         <button id="fPlus" aria-label="Texte plus grand">A＋</button>
         <button id="pPause" aria-label="Pause du prompteur">⏯</button>
+        <button id="flip" aria-label="Changer de caméra">🔄</button>
       </div>
       <div class="row" style="margin-top:12px">
         <button class="ghost" id="sClose">Fermer</button>
@@ -154,7 +159,7 @@ async function api(a, fields = {}) {
   const body = new URLSearchParams({ k: KEY, a, ...fields });
   const r = await fetch(API, { method: "POST", body });
   const txt = await r.text();
-  let j; try { j = JSON.parse(txt); } catch { throw new Error(txt === "Accepted" ? "Clé d'accès refusée — rouvre le lien d'installation." : "Réponse inattendue : " + txt.slice(0, 120)); }
+  let j; try { j = JSON.parse(txt); } catch { throw new Error(txt === "Accepted" ? "Make a refusé la demande (clé d'accès ou données invalides). Si ça persiste, rouvre le lien d'installation." : "Réponse inattendue : " + txt.slice(0, 120)); }
   if (j && j.status && j.status >= 300) throw new Error("Notion a refusé (" + j.status + ")");
   return j;
 }
@@ -187,7 +192,8 @@ async function load() {
 
 /* ---------- liste ---------- */
 const isAr = r => r.lang === "عربي";
-const mins = s => Math.max(1, Math.round(s.split(/\s+/).length / 150 * 60));
+const words = s => s.split(/\s+/).filter(Boolean).length;
+const secs = r => Math.max(5, Math.round(words(r.script) / (isAr(r) ? 2.2 : 2.5)));
 function render() {
   document.querySelectorAll("#langSeg button").forEach(b => b.classList.toggle("on", b.dataset.l === S.lang));
   const msg = $("#msg");
@@ -198,9 +204,9 @@ function render() {
     !rows.length ? `<div class="empty">Aucun script à tourner. Appuie sur « ＋ Scripts ».</div>` :
     rows.map(r => `<div class="card">
       <input type="checkbox" data-sel="${r.id}" ${S.sel.has(r.id) ? "checked" : ""} aria-label="Ajouter au tournage">
-      <div class="b"><div class="t" dir="auto">${esc(r.name)}</div>
+      <div class="b"><div class="t" dir="auto" data-edit="${r.id}">${esc(r.name)} <span class="small">✎</span></div>
         <div class="meta"><span class="pill">${isAr(r) ? "AR" : r.lang === "Francais" ? "FR" : esc(r.lang || "?")}</span>
-        <span class="pill">~${mins(r.script)} s</span>
+        <span class="pill">~${secs(r)} s</span>
         ${r.desc && r.tags ? `<span class="pill ok">texte prêt</span>` : `<span class="pill warn">texte auto</span>`}
         ${r.promo ? `<span class="pill">promo app</span>` : ""}</div></div>
       <button class="go" data-one="${r.id}" aria-label="Tourner ce script">▶</button></div>`).join("");
@@ -212,8 +218,61 @@ $("#langSeg").onclick = e => { const l = e.target.dataset.l; if (!l) return; S.l
 $("#list").onclick = e => {
   const c = e.target.closest("[data-sel]"); if (c) { c.checked ? S.sel.add(c.dataset.sel) : S.sel.delete(c.dataset.sel); render(); return; }
   const g = e.target.closest("[data-one]"); if (g) openPlan([g.dataset.one]);
+  const ed = e.target.closest("[data-edit]"); if (ed) openEdit(S.rows.find(r => r.id === ed.dataset.edit));
 };
 $("#bShoot").onclick = () => openPlan(S.rows.filter(r => S.sel.has(r.id)).map(r => r.id));
+
+/* ---------- modifier un script ---------- */
+function openEdit(r) {
+  if (!r) return;
+  $("#sheet").innerHTML = `<div class="sheet"><div>
+    <h2 style="margin:0 0 4px" dir="auto">${esc(r.name)}</h2>
+    <label>Script (ce que tu lis au prompteur)</label><textarea id="eScript" rows="10" dir="auto">${esc(r.script)}</textarea>
+    <label>Description</label><textarea id="eDesc" rows="3" dir="auto" placeholder="Vide = Claude l'écrit à l'envoi">${esc(r.desc)}</textarea>
+    <label>Hashtags</label><input id="eTags" dir="auto" value="${esc(r.tags)}" placeholder="Vide = Claude les choisit">
+    <label style="display:flex;gap:8px;align-items:center;color:var(--txt)"><input type="checkbox" id="ePromo" style="width:auto" ${r.promo ? "checked" : ""}> Promo de l'app Vague (« Votre marque »)</label>
+    <div class="row" style="margin-top:18px"><button class="ghost" id="eCancel">Fermer</button><button class="pri" id="eSave">Enregistrer</button></div>
+  </div></div>`;
+  $("#eCancel").onclick = () => $("#sheet").innerHTML = "";
+  $("#eSave").onclick = async () => {
+    const v = { script: $("#eScript").value.trim(), desc: $("#eDesc").value.trim(), tags: $("#eTags").value.trim(), promo: $("#ePromo").checked };
+    const b = $("#eSave"); b.disabled = true; b.textContent = "Enregistrement…";
+    try {
+      await api("update", { id: r.id, props: JSON.stringify({ Script: rt(v.script), Description: rt(v.desc), Hashtags: rt(v.tags), "Promo app": { checkbox: v.promo } }) });
+      Object.assign(r, v); $("#sheet").innerHTML = ""; toast("Enregistré dans Notion."); render();
+    } catch (e) { b.disabled = false; b.textContent = "Enregistrer"; toast(e.message); }
+  };
+}
+
+/* ---------- onglets : à tourner / suivi ---------- */
+S.tab = "shoot";
+$("#tabs").onclick = e => {
+  const t = e.target.closest("[data-t]")?.dataset.t; if (!t) return; S.tab = t;
+  document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.t === t));
+  $("#list").hidden = $("#queue").hidden = t !== "shoot"; $("#track").hidden = t !== "track";
+  document.querySelector(".bar").style.display = t === "shoot" ? "" : "none";
+  if (t === "track") loadTrack();
+};
+async function loadTrack() {
+  const el = $("#track"); el.innerHTML = `<div class="empty">Chargement…</div>`;
+  try {
+    const res = await api("recent");
+    const items = (Array.isArray(res) ? res : []).map(p => {
+      const pr = p.properties || {};
+      return { name: plain(pr.Name?.title) || "Sans titre", lang: pr.Language?.select?.name || "", st: pr["Statut publication"]?.select?.name || "",
+        stage: pr["Pipeline Stage"]?.select?.name || "", prod: pr.Production?.select?.name || "", date: pr["Publish Date"]?.date?.start || "",
+        links: (plain(pr["Liens publiés"]?.rich_text) + " " + (pr["Published URL"]?.url || "")).match(/https?:\/\/\S+/g) || [] };
+    }).filter(i => S.lang === "all" || i.lang === S.lang);
+    el.innerHTML = !items.length ? `<div class="empty">Rien de programmé pour l'instant.</div>` : items.map(i => {
+      const cls = i.st === "Publié" ? "ok" : i.st === "Erreur" ? "warn" : "";
+      const d = i.date ? new Date(i.date).toLocaleString("fr-FR", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
+      return `<div class="card"><div class="b"><div class="t" dir="auto">${esc(i.name)}</div>
+        <div class="meta"><span class="pill">${i.lang === "عربي" ? "AR" : "FR"}</span><span class="pill ${cls}">${esc(i.st || i.stage)}</span>${i.prod ? `<span class="pill">${esc(i.prod)}</span>` : ""}${d ? `<span class="pill">${esc(d)}</span>` : ""}</div>
+        ${i.links.length ? `<div class="links small" style="margin-top:6px">${[...new Set(i.links)].map(u => `<a href="${esc(u)}" target="_blank" rel="noopener">${/tiktok/.test(u) ? "TikTok" : /youtu/.test(u) ? "YouTube" : "lien"}</a>`).join("")}</div>` : ""}
+      </div></div>`;
+    }).join("") + `<div class="small" style="text-align:center;margin-top:10px">« En attente » part à l'heure prévue (vérifié toutes les 15 min) · « Envoyé » = en cours chez TikTok/YouTube · liens ajoutés automatiquement.</div>`;
+  } catch (e) { el.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+}
 
 /* ---------- plan de publication du lot ---------- */
 function nextSlot(base, hhmm) {
@@ -246,7 +305,7 @@ function publishDate(r, plan) {
 }
 
 /* ---------- plateau : caméra + prompteur ---------- */
-const P = { ids: [], i: 0, plan: null, stream: null, rec: null, chunks: [], blob: null, mime: "", y: 0, speed: store.get("speed", 40), font: store.get("font", 30), run: false, raf: 0, t0: 0, lock: null };
+const P = { ids: [], i: 0, plan: null, stream: null, rec: null, chunks: [], blob: null, mime: "", y: 0, speed: 40, mult: store.get("mult", 1), font: store.get("font", 30), facing: "user", run: false, raf: 0, t0: 0, lock: null };
 function pickMime() {
   for (const m of ["video/mp4;codecs=avc1,mp4a.40.2", "video/mp4", "video/webm;codecs=vp9,opus", "video/webm"])
     if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m;
@@ -255,23 +314,34 @@ function pickMime() {
 async function startShoot(ids, plan) {
   if (!window.MediaRecorder || !navigator.mediaDevices?.getUserMedia) { toast("Ce navigateur ne peut pas filmer. Ouvre le Studio dans Safari."); return; }
   Object.assign(P, { ids, i: 0, plan });
-  try {
-    P.stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: "user", width: { ideal: 1080 }, height: { ideal: 1920 }, aspectRatio: { ideal: 9 / 16 }, frameRate: { ideal: 30 } },
-      audio: { echoCancellation: true, noiseSuppression: true }
-    });
-  } catch (e) { toast("Caméra refusée : autorise la caméra et le micro pour ce site dans Réglages › Safari."); return; }
-  $("#cam").srcObject = P.stream;
+  if (!await openCam()) return;
   $("#stage").classList.add("on");
   try { P.lock = await navigator.wakeLock?.request("screen"); } catch {}
   showTake();
+}
+async function openCam() {
+  P.stream?.getTracks().forEach(t => t.stop());
+  try {
+    P.stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: P.facing, width: { ideal: 1080 }, height: { ideal: 1920 }, aspectRatio: { ideal: 9 / 16 }, frameRate: { ideal: 30 } },
+      audio: { echoCancellation: true, noiseSuppression: true }
+    });
+  } catch (e) { toast("Caméra refusée : autorise la caméra et le micro pour ce site dans Réglages › Safari."); return false; }
+  $("#cam").srcObject = P.stream; $("#cam").style.transform = P.facing === "user" ? "scaleX(-1)" : "none";
+  return true;
+}
+function calibrate() {
+  const r = cur(); if (!r) return;
+  const t = $("#ptext"), cs = getComputedStyle(t);
+  const h = t.scrollHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+  P.speed = Math.max(8, h / secs(r)) * P.mult;
 }
 function cur() { return S.rows.find(r => r.id === P.ids[P.i]); }
 function showTake() {
   const r = cur(); if (!r) return closeShoot();
   $("#hTitle").textContent = r.name; $("#hPos").textContent = `${P.i + 1}/${P.ids.length}`;
   const t = $("#ptext"); t.textContent = r.script; t.className = isAr(r) ? "ar" : ""; t.dir = isAr(r) ? "rtl" : "ltr";
-  t.style.fontSize = P.font + "px"; P.y = 0; t.style.transform = "translateY(0)";
+  t.style.fontSize = P.font + "px"; P.y = 0; t.style.transform = "translateY(0)"; calibrate();
   $("#play").style.display = "none"; $("#play").removeAttribute("src"); $("#cam").style.display = "block";
   $("#prompt").style.display = "block"; $("#live").style.display = "block"; $("#review").style.display = "none";
   $("#rec").classList.remove("on"); $("#info").hidden = true;
@@ -280,7 +350,7 @@ function scrollLoop(ts) {
   if (!P.last) P.last = ts;
   const dt = (ts - P.last) / 1000; P.last = ts;
   if (P.run) {
-    const t = $("#ptext"); const max = Math.max(0, t.scrollHeight - $("#prompt").clientHeight * 0.4);
+    const t = $("#ptext"); const max = Math.max(0, t.scrollHeight - $("#prompt").clientHeight);
     P.y = Math.min(max, P.y + P.speed * dt); t.style.transform = `translateY(${-P.y}px)`;
   }
   if (P.rec) { const s = Math.floor((Date.now() - P.t0) / 1000); $("#info").innerHTML = `<span class="dot"></span>${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
@@ -309,10 +379,13 @@ $("#rec").onclick = async () => {
   P.rec.start(1000); P.t0 = Date.now(); P.run = true; P.last = 0;
   $("#rec").classList.add("on"); $("#info").hidden = false;
 };
-$("#sSlow").onclick = () => { P.speed = Math.max(10, P.speed - 8); store.set("speed", P.speed); toast("Vitesse " + P.speed, 900); };
-$("#sFast").onclick = () => { P.speed = Math.min(160, P.speed + 8); store.set("speed", P.speed); toast("Vitesse " + P.speed, 900); };
-$("#fMinus").onclick = () => { P.font = Math.max(18, P.font - 3); store.set("font", P.font); $("#ptext").style.fontSize = P.font + "px"; };
-$("#fPlus").onclick = () => { P.font = Math.min(56, P.font + 3); store.set("font", P.font); $("#ptext").style.fontSize = P.font + "px"; };
+function setMult(m) { P.mult = Math.min(2.5, Math.max(0.4, Math.round(m * 10) / 10)); store.set("mult", P.mult); calibrate(); toast("Vitesse ×" + P.mult, 900); }
+$("#sSlow").onclick = () => setMult(P.mult - 0.1);
+$("#sFast").onclick = () => setMult(P.mult + 0.1);
+function setFont(f) { P.font = Math.min(56, Math.max(18, f)); store.set("font", P.font); $("#ptext").style.fontSize = P.font + "px"; calibrate(); }
+$("#fMinus").onclick = () => setFont(P.font - 3);
+$("#fPlus").onclick = () => setFont(P.font + 3);
+$("#flip").onclick = async () => { if (P.rec) return; P.facing = P.facing === "user" ? "environment" : "user"; await openCam(); };
 $("#pPause").onclick = () => { P.run = !P.run; P.last = 0; };
 $("#prompt").onclick = () => { if (P.rec) { P.run = !P.run; P.last = 0; } };
 $("#sSkip").onclick = () => { if (P.rec) return; P.i++; showTake(); };
@@ -333,6 +406,20 @@ function closeShoot() {
 }
 
 /* ---------- file d'envoi : Dropbox puis programmation Notion ---------- */
+// Chaque prise gardée est rangée dans IndexedDB jusqu'à sa programmation : si Safari se ferme, l'envoi reprend à la réouverture.
+const idb = (() => {
+  let p;
+  const db = () => p ??= new Promise((ok, ko) => { const r = indexedDB.open("studio", 1); r.onupgradeneeded = () => r.result.createObjectStore("takes", { keyPath: "key" }); r.onsuccess = () => ok(r.result); r.onerror = () => ko(r.error); });
+  const tx = async (mode, fn) => { const d = await db(); return new Promise((ok, ko) => { const t = d.transaction("takes", mode); const req = fn(t.objectStore("takes")); t.oncomplete = () => ok(req?.result); t.onerror = () => ko(t.error); }); };
+  return { put: v => tx("readwrite", s => s.put(v)).catch(() => {}), del: k => tx("readwrite", s => s.delete(k)).catch(() => {}), all: () => tx("readonly", s => s.getAll()).catch(() => []) };
+})();
+const saveQ = q => idb.put({ key: q.key, r: q.r, blob: q.blob, ext: q.ext, date: q.date, t: q.t, file: q.file || "" });
+async function resumeQueue() {
+  for (const v of await idb.all() || []) {
+    if (S.queue.some(q => q.key === v.key)) continue;
+    const q = { ...v, state: "reprise…", ok: false, err: false }; S.queue.push(q); renderQueue(); runQueue(q);
+  }
+}
 function renderQueue() {
   if (!S.queue.length) { $("#queue").innerHTML = ""; return; }
   $("#queue").innerHTML = `<div class="small" style="margin-bottom:4px">Envois — garde le Studio ouvert jusqu'à ✓</div>` + S.queue.map((q, i) =>
@@ -340,8 +427,8 @@ function renderQueue() {
 }
 $("#queue").onclick = e => { const b = e.target.closest("[data-retry]"); if (b) { const q = S.queue[+b.dataset.retry]; q.err = false; runQueue(q); } };
 function enqueue(r, blob, mime, date) {
-  const q = { r, blob, ext: /mp4/.test(mime) ? "mp4" : /quicktime/.test(mime) ? "mov" : "webm", date, state: "en attente", ok: false, err: false };
-  S.queue.push(q); renderQueue(); runQueue(q);
+  const q = { key: r.id + "-" + Date.now(), r, blob, ext: /mp4/.test(mime) ? "mp4" : /quicktime/.test(mime) ? "mov" : "webm", date, t: String(Math.floor(Date.now() / 1000)), state: "en attente", ok: false, err: false };
+  S.queue.push(q); renderQueue(); saveQ(q).then(() => runQueue(q));
 }
 function setQ(q, state) { q.state = state; renderQueue(); }
 function putFile(link, blob, onp) {
@@ -364,15 +451,15 @@ async function runQueue(q) {
   try {
     if (!q.file) {
       setQ(q, "texte…"); await ensureText(q.r);
-      q.t = q.t || String(Math.floor(Date.now() / 1000));
+
       const up = await api("upload", { id: q.r.id, ext: q.ext, t: q.t });
       if (!up.link) throw new Error("pas de lien d'envoi");
       await putFile(up.link, q.blob, p => setQ(q, "envoi " + p + " %"));
-      q.file = up.file;
+      q.file = up.file; saveQ(q);
     }
     setQ(q, "programmation…");
     await api("done", { id: q.r.id, file: q.file, date: q.date });
-    q.ok = true; q.blob = null;
+    q.ok = true; q.blob = null; idb.del(q.key);
     const when = new Date(q.date);
     setQ(q, when - Date.now() < 60000 ? "✓ part dans ~15 min" : "✓ " + when.toLocaleString("fr-FR", { weekday: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }));
     S.rows = S.rows.filter(x => x.id !== q.r.id); render();
@@ -446,7 +533,7 @@ $("#bNew").onclick = () => {
 };
 
 render();
-if (KEY) load(); else S.loading = false, render();
+if (KEY) { load(); resumeQueue(); } else { S.loading = false; render(); }
 </script>
 </body>
 </html>
