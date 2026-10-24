@@ -76,6 +76,9 @@ h1{font-size:22px;margin:0}
 #ptext{padding-top:52px;padding-bottom:60vh}
 .card .t{cursor:pointer}
 .links a{color:#8fb8ff;margin-right:10px;word-break:break-all}
+#hookPrev{position:absolute;left:8%;right:8%;top:22%;text-align:center;font-weight:900;font-size:30px;line-height:1.25;pointer-events:none;display:none}
+#hookPrev span{background:#ffe14d;color:#111;padding:2px 10px;border-radius:8px;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+#hookChip{background:rgba(255,225,77,.16);border:1px solid #ffe14d;color:#ffe14d;border-radius:10px;padding:6px 10px;font-size:13px;text-align:left}
 .hudtop{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:14px}
 </style>
 </head>
@@ -105,9 +108,11 @@ h1{font-size:22px;margin:0}
   <div id="prompt"><div id="ptext"></div></div>
   <div id="guide"></div>
   <div id="count"></div>
+  <div id="hookPrev" dir="auto"></div>
   <div id="info" hidden></div>
   <div id="hud">
     <div class="hudtop"><span id="hTitle"></span><span id="hPos"></span></div>
+    <button id="hookChip" aria-label="Modifier l'accroche à l'écran"></button>
     <div id="live">
       <div class="row">
         <button id="sSlow" aria-label="Plus lent">🐢</button>
@@ -177,7 +182,8 @@ function row(p) {
     script: spoken(plain(pr.Script?.rich_text)),
     desc: plain(pr.Description?.rich_text),
     tags: plain(pr.Hashtags?.rich_text),
-    promo: !!pr["Promo app"]?.checkbox
+    promo: !!pr["Promo app"]?.checkbox,
+    hook: plain(pr["Texte écran"]?.rich_text)
   };
 }
 async function load() {
@@ -237,16 +243,17 @@ function openEdit(r) {
     <h2 style="margin:0 0 4px" dir="auto">${esc(r.name)}</h2>
     <label>Script (ce que tu lis au prompteur)</label><textarea id="eScript" rows="10" dir="auto">${esc(r.script)}</textarea>
     <label>Description</label><textarea id="eDesc" rows="3" dir="auto" placeholder="Vide = Claude l'écrit à l'envoi">${esc(r.desc)}</textarea>
+    <label>Texte écran (accroche des 3 premières secondes, 3 à 6 mots)</label><input id="eHook" dir="auto" value="${esc(r.hook)}" placeholder="Vide = Claude l'écrit avant le tournage">
     <label>Hashtags</label><input id="eTags" dir="auto" value="${esc(r.tags)}" placeholder="Vide = Claude les choisit">
     <label style="display:flex;gap:8px;align-items:center;color:var(--txt)"><input type="checkbox" id="ePromo" style="width:auto" ${r.promo ? "checked" : ""}> Promo de l'app Vague (« Votre marque »)</label>
     <div class="row" style="margin-top:18px"><button class="ghost" id="eCancel">Fermer</button><button class="pri" id="eSave">Enregistrer</button></div>
   </div></div>`;
   $("#eCancel").onclick = () => $("#sheet").innerHTML = "";
   $("#eSave").onclick = async () => {
-    const v = { script: $("#eScript").value.trim(), desc: $("#eDesc").value.trim(), tags: $("#eTags").value.trim(), promo: $("#ePromo").checked };
+    const v = { script: $("#eScript").value.trim(), desc: $("#eDesc").value.trim(), tags: $("#eTags").value.trim(), promo: $("#ePromo").checked, hook: $("#eHook").value.trim() };
     const b = $("#eSave"); b.disabled = true; b.textContent = "Enregistrement…";
     try {
-      await api("update", { id: r.id, props: JSON.stringify({ Script: rt(v.script), Description: rt(v.desc), Hashtags: rt(v.tags), "Promo app": { checkbox: v.promo } }) });
+      await api("update", { id: r.id, props: JSON.stringify({ Script: rt(v.script), Description: rt(v.desc), Hashtags: rt(v.tags), "Texte écran": rt(v.hook), "Promo app": { checkbox: v.promo } }) });
       Object.assign(r, v); $("#sheet").innerHTML = ""; toast("Enregistré dans Notion."); render();
     } catch (e) { b.disabled = false; b.textContent = "Enregistrer"; toast(e.message); }
   };
@@ -299,10 +306,24 @@ function openPlan(ids) {
   </div></div>`;
   $("#pMode").value = plan.mode;
   $("#pCancel").onclick = () => $("#sheet").innerHTML = "";
-  $("#pGo").onclick = () => {
+  $("#pGo").onclick = async () => {
     const p = { mode: $("#pMode").value, time: $("#pTime").value || "18:00" }; store.set("plan", p);
+    const b = $("#pGo"); b.disabled = true; b.textContent = "Claude prépare les accroches…";
+    await ensureHooks(ids);
     $("#sheet").innerHTML = ""; startShoot(ids, p);
   };
+}
+async function ensureHooks(ids) {
+  const todo = S.rows.filter(r => ids.includes(r.id) && !r.hook);
+  if (!todo.length) return;
+  try {
+    const out = await api("gen", { prompt: hooksPrompt(todo) });
+    const j = parseJSON(out.text) || {};
+    await Promise.all(todo.map(r => {
+      const h = String(j[r.id] || "").trim().slice(0, 60); if (!h) return;
+      r.hook = h; return api("update", { id: r.id, props: JSON.stringify({ "Texte écran": rt(h) }) }).catch(() => {});
+    }));
+  } catch (e) { toast("Accroches non générées : " + e.message); }
 }
 function publishDate(r, plan) {
   if (plan.mode === "now") return new Date().toISOString();
@@ -350,6 +371,62 @@ function calibrate() {
   P.speed = Math.max(8, h / secs(r)) * P.mult;
 }
 function cur() { return S.rows.find(r => r.id === P.ids[P.i]); }
+
+/* ---------- incrustation : la vidéo est enregistrée depuis un canvas 1080×1920 qui ajoute l'accroche ---------- */
+const HOOK_MS = 3000;
+const C = { cv: null, x: null, raf: 0, t0: 0, hook: "", ar: false, on: false };
+const canComposite = () => typeof HTMLCanvasElement.prototype.captureStream === "function";
+function hookLines(x, text, maxW) {
+  const lines = []; let line = "";
+  for (const w of text.split(/\s+/).filter(Boolean)) {
+    const t = line ? line + " " + w : w;
+    if (x.measureText(t).width > maxW && line) { lines.push(line); line = w; } else line = t;
+  }
+  if (line) lines.push(line); return lines.slice(0, 3);
+}
+function drawHook(x, W, H, el) {
+  const pop = Math.min(1, el / 220), fade = el > HOOK_MS - 250 ? Math.max(0, (HOOK_MS - el) / 250) : 1;
+  const size = 108, lh = size * 1.22, padX = 32, padY = 16;
+  x.save(); x.globalAlpha = fade;
+  x.font = `900 ${size}px -apple-system, "SF Pro Display", "Noto Sans Arabic", "Geeza Pro", Arial, sans-serif`;
+  x.direction = C.ar ? "rtl" : "ltr"; x.textAlign = "center"; x.textBaseline = "middle";
+  const lines = hookLines(x, C.hook, W * 0.8), cy = H * 0.24;
+  x.translate(W / 2, cy); x.scale(0.85 + 0.15 * pop, 0.85 + 0.15 * pop); x.rotate(-0.02);
+  lines.forEach((l, i) => {
+    const y = (i - (lines.length - 1) / 2) * lh, w = x.measureText(l).width;
+    x.fillStyle = "#ffe14d"; x.beginPath(); x.roundRect(-w / 2 - padX, y - size / 2 - padY, w + padX * 2, size + padY * 2, 18); x.fill();
+    x.fillStyle = "#111"; x.fillText(l, 0, y + 4);
+  });
+  x.restore();
+}
+function compose() {
+  const v = $("#cam"), W = 1080, H = 1920, x = C.x;
+  if (v.videoWidth) {
+    const s = Math.max(W / v.videoWidth, H / v.videoHeight), w = v.videoWidth * s, h = v.videoHeight * s;
+    x.drawImage(v, (W - w) / 2, (H - h) / 2, w, h);
+  }
+  const el = performance.now() - C.t0;
+  if (C.hook && el < HOOK_MS) drawHook(x, W, H, el);
+  $("#hookPrev").style.display = C.hook && el < HOOK_MS ? "block" : "none";
+  if (C.on) C.raf = requestAnimationFrame(compose);
+}
+function recStream(r) {
+  if (!canComposite()) return P.stream;
+  if (!C.cv) { C.cv = document.createElement("canvas"); C.cv.width = 1080; C.cv.height = 1920; C.x = C.cv.getContext("2d"); }
+  C.hook = (r.hook || "").trim(); C.ar = isAr(r); C.t0 = performance.now(); C.on = true; compose();
+  return new MediaStream([...C.cv.captureStream(30).getVideoTracks(), ...P.stream.getAudioTracks()]);
+}
+function stopCompose() { C.on = false; cancelAnimationFrame(C.raf); $("#hookPrev").style.display = "none"; }
+function showHook(r) {
+  $("#hookChip").textContent = r.hook ? `🪝 À l'écran (3 s) : « ${r.hook} » ✎` : "🪝 Ajouter un texte d'accroche ✎";
+  $("#hookPrev").innerHTML = r.hook ? `<span>${esc(r.hook)}</span>` : "";
+}
+$("#hookChip").onclick = async () => {
+  const r = cur(); if (!r || P.rec) return;
+  const h = prompt("Texte affiché sur les 3 premières secondes (3 à 6 mots) :", r.hook || ""); if (h == null) return;
+  r.hook = h.trim(); showHook(r);
+  try { await api("update", { id: r.id, props: JSON.stringify({ "Texte écran": rt(r.hook) }) }); } catch (e) { toast(e.message); }
+};
 function showTake() {
   const r = cur(); if (!r) return closeShoot();
   $("#hTitle").textContent = r.name; $("#hPos").textContent = `${P.i + 1}/${P.ids.length}`;
@@ -357,7 +434,7 @@ function showTake() {
   t.style.fontSize = P.font + "px"; P.y = 0; t.style.transform = "translateY(0)"; calibrate();
   $("#play").style.display = "none"; $("#play").removeAttribute("src"); $("#cam").style.display = "block";
   $("#prompt").style.display = "block"; $("#live").style.display = "block"; $("#review").style.display = "none";
-  $("#rec").classList.remove("on"); $("#info").hidden = true;
+  $("#rec").classList.remove("on"); $("#info").hidden = true; showHook(r); $("#hookChip").style.display = "";
 }
 function scrollLoop(ts) {
   if (!P.last) P.last = ts;
@@ -379,12 +456,15 @@ $("#rec").onclick = async () => {
   if (P.rec) { P.rec.stop(); return; }
   await countdown();
   P.mime = pickMime(); P.chunks = [];
-  try { P.rec = new MediaRecorder(P.stream, P.mime ? { mimeType: P.mime, videoBitsPerSecond: 5_000_000 } : undefined); }
-  catch { P.rec = new MediaRecorder(P.stream); }
+  const src = recStream(cur());
+  if (src === P.stream && cur()?.hook) toast("Ce navigateur ne permet pas l'incrustation : la vidéo part sans texte.");
+  try { P.rec = new MediaRecorder(src, P.mime ? { mimeType: P.mime, videoBitsPerSecond: 6_000_000 } : undefined); }
+  catch { P.rec = new MediaRecorder(src); }
+  $("#hookChip").style.display = "none";
   P.mime = P.rec.mimeType || P.mime || "video/mp4";
   P.rec.ondataavailable = e => e.data.size && P.chunks.push(e.data);
   P.rec.onstop = () => {
-    P.blob = new Blob(P.chunks, { type: P.mime }); P.rec = null; P.run = false;
+    stopCompose(); P.blob = new Blob(P.chunks, { type: P.mime }); P.rec = null; P.run = false;
     $("#rec").classList.remove("on"); $("#info").hidden = true;
     const v = $("#play"); v.src = URL.createObjectURL(P.blob); v.style.display = "block"; $("#cam").style.display = "none";
     $("#prompt").style.display = "none"; $("#live").style.display = "none"; $("#review").style.display = "flex";
@@ -499,11 +579,26 @@ function scriptsPrompt(o) {
   return `Tu es l'auteur des vidéos courtes du Dr Fehmi : médecin, santé mentale, anxiété, sommeil, arrêt du tabac, IA en santé. Il filme lui-même face caméra avec un prompteur.
 Écris ${o.n} script${o.n > 1 ? "s" : ""} DIFFÉRENTS sur : ${o.topic}
 Langue : ${o.lang === "عربي" ? "arabe (darija tunisienne naturelle, facile à lire au prompteur)" : "français parlé, phrases courtes"}.
-Durée cible : ${o.sec} secondes à l'oral (~${Math.round(o.sec * 2.5)} mots). Accroche forte dans la 1re phrase, un seul message, appel à l'action à la fin.
+Durée cible : ${o.sec} secondes à l'oral (~${Math.round(o.sec * 2.5)} mots).
+${RETENTION}
 ${o.promo ? "Mentionne naturellement son app « Vague » pour arrêter de fumer." : "Pas de promotion."}
 Pas d'indications de mise en scène, pas d'emojis : seulement le texte à dire, avec des retours à la ligne pour respirer.
 Ne donne pas de conseil médical dangereux ; reste factuel et prudent.
-Réponds UNIQUEMENT en JSON : [{"title": "titre court accrocheur", "script": "...", "description": "2-3 phrases + question, sans hashtags", "hashtags": "5 à 8 hashtags"}]`;
+Réponds UNIQUEMENT en JSON : [{"title": "titre YouTube accrocheur, 60 caractères max", "hook": "texte écran 3 à 6 mots", "script": "...", "description": "2-3 phrases + question, sans hashtags", "hashtags": "5 à 8 hashtags"}]`;
+}
+const RETENTION = `Techniques de rétention à appliquer :
+- 0–2 s : la 1re phrase est l'accroche. Pas de « Bonjour », pas de présentation. Utilise une rupture : affirmation contre-intuitive, erreur fréquente (« Arrête de… »), chiffre précis, question qui touche une douleur, ou promesse concrète.
+- Boucle ouverte : annonce tôt ce qui vient (« le 3e point est celui que personne ne fait ») et ne la referme qu'à la fin.
+- Une idée par ligne, phrases de 12 mots max, mots simples, tutoiement.
+- Relance toutes les 5 à 7 secondes (« Mais attention… », « Et c'est là que ça devient intéressant… », « Le pire ? »).
+- Un exemple concret ou une image mentale plutôt que de la théorie.
+- Fin : la promesse est tenue, puis une question simple qui pousse à commenter. Si possible, une dernière phrase qui se relie à la première pour que la vidéo boucle.
+- Texte écran (« hook ») : 3 à 6 mots qui créent un manque de curiosité, complémentaire à la phrase dite (pas identique), sans emoji, lisible en 1 seconde.`;
+function hooksPrompt(rows) {
+  return `Tu écris le texte affiché à l'écran pendant les 3 premières secondes de vidéos courtes (TikTok / YouTube Shorts) du Dr Fehmi, médecin. Il sert aussi de miniature.
+Règles : 3 à 6 mots, dans la langue du script, crée un manque de curiosité ou nomme une douleur, complémentaire à la 1re phrase (pas identique), sans emoji, sans hashtag, pas de promesse médicale exagérée.
+${rows.map(r => `ID ${r.id} | ${isAr(r) ? "arabe" : "français"} | Titre : ${r.name}\nDébut du script : ${r.script.slice(0, 500)}`).join("\n---\n")}
+Réponds UNIQUEMENT en JSON : {"<ID>": "texte écran", ...}`;
 }
 $("#bNew").onclick = () => {
   const o = store.get("gen", { topic: "", lang: "Francais", n: 3, sec: 45, promo: false });
@@ -534,7 +629,7 @@ $("#bNew").onclick = () => {
         btn.textContent = `Enregistrement ${++done}/${arr.length}…`;
         await api("create", { props: JSON.stringify({
           Name: { title: [{ text: { content: String(s.title || opt.topic).slice(0, 200) } }] },
-          Script: rt(s.script), Description: rt(s.description), Hashtags: rt(s.hashtags),
+          Script: rt(s.script), Description: rt(s.description), Hashtags: rt(s.hashtags), "Texte écran": rt(s.hook),
           Type: { select: { name: "Short" } }, Language: { select: { name: opt.lang } },
           Channel: { select: { name: opt.lang === "عربي" ? "Dr Fehmi AR" : "Fehmi Tlaies FR" } },
           "Pipeline Stage": { select: { name: "Script" } }, "Promo app": { checkbox: opt.promo }
