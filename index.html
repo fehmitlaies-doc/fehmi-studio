@@ -79,6 +79,12 @@ h1{font-size:22px;margin:0}
 #hookPrev{position:absolute;left:8%;right:8%;top:22%;text-align:center;font-weight:900;font-size:30px;line-height:1.25;pointer-events:none;display:none}
 #hookPrev span{background:#ffe14d;color:#111;padding:2px 10px;border-radius:8px;box-decoration-break:clone;-webkit-box-decoration-break:clone}
 #hookChip{background:rgba(255,225,77,.16);border:1px solid #ffe14d;color:#ffe14d;border-radius:10px;padding:6px 10px;font-size:13px;text-align:left}
+#fx{position:fixed;inset:0;background:#000;z-index:45;display:none}
+#fx.on{display:block}
+#fxc,#fxv{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
+#fxv{display:none}
+#fxhud{position:absolute;left:0;right:0;bottom:0;padding:12px 16px calc(16px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:10px;background:linear-gradient(rgba(0,0,0,0),rgba(0,0,0,.8) 30%)}
+#fxSteps div{padding:2px 0}
 .hudtop{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:14px}
 </style>
 </head>
@@ -135,6 +141,16 @@ h1{font-size:22px;margin:0}
   </div>
 </div>
 
+<!-- producteur sans visage : voix clonée + images IA + montage dans le navigateur -->
+<div id="fx">
+  <canvas id="fxc" width="1080" height="1920"></canvas>
+  <video id="fxv" playsinline controls></video>
+  <div id="fxhud">
+    <div class="hudtop"><span id="fxTitle"></span></div>
+    <div id="fxSteps" class="small"></div>
+    <div class="row" id="fxBtns"></div>
+  </div>
+</div>
 <div id="sheet"></div>
 <div class="toast" id="toast" hidden></div>
 
@@ -183,7 +199,8 @@ function row(p) {
     desc: plain(pr.Description?.rich_text),
     tags: plain(pr.Hashtags?.rich_text),
     promo: !!pr["Promo app"]?.checkbox,
-    hook: plain(pr["Texte écran"]?.rich_text)
+    hook: plain(pr["Texte écran"]?.rich_text),
+    fx: (() => { try { const j = JSON.parse(plain(pr["Scènes"]?.rich_text) || "null"); return j && Array.isArray(j.scenes) && j.scenes.length ? j : null; } catch { return null; } })()
   };
 }
 async function load() {
@@ -217,13 +234,13 @@ function render() {
   $("#list").innerHTML = S.loading ? `<div class="empty">Chargement des scripts…</div>` :
     !rows.length ? `<div class="empty">Aucun script à tourner. Appuie sur « ＋ Scripts ».</div>` :
     rows.map(r => `<div class="card">
-      <input type="checkbox" data-sel="${r.id}" ${S.sel.has(r.id) ? "checked" : ""} aria-label="Ajouter au tournage">
+      ${r.fx ? `<span style="width:24px;flex:none;text-align:center" aria-hidden="true">🎞</span>` : `<input type="checkbox" data-sel="${r.id}" ${S.sel.has(r.id) ? "checked" : ""} aria-label="Ajouter au tournage">`}
       <div class="b"><div class="t" dir="auto" data-edit="${r.id}">${esc(r.name)} <span class="small">✎</span></div>
         <div class="meta"><span class="pill">${isAr(r) ? "AR" : r.lang === "Francais" ? "FR" : esc(r.lang || "?")}</span>
         <span class="pill">~${secs(r)} s</span>
         ${r.desc && r.tags ? `<span class="pill ok">texte prêt</span>` : `<span class="pill warn">texte auto</span>`}
-        ${r.promo ? `<span class="pill">promo app</span>` : ""}</div></div>
-      <button class="go" data-one="${r.id}" aria-label="Tourner ce script">▶</button></div>`).join("");
+        ${r.promo ? `<span class="pill">promo app</span>` : ""}${r.fx ? `<span class="pill">sans visage · ${esc(STYLES[r.fx.style]?.label || "")}</span>` : ""}</div></div>
+      ${r.fx ? `<button class="go" data-make="${r.id}" aria-label="Produire la vidéo sans visage">🎞</button>` : `<button class="go" data-one="${r.id}" aria-label="Tourner ce script">▶</button>`}</div>`).join("");
   const n = S.sel.size;
   $("#bShoot").textContent = `Tourner (${n})`; $("#bShoot").disabled = !n;
   renderQueue();
@@ -232,6 +249,7 @@ $("#langSeg").onclick = e => { const l = e.target.dataset.l; if (!l) return; S.l
 $("#list").onclick = e => {
   const c = e.target.closest("[data-sel]"); if (c) { c.checked ? S.sel.add(c.dataset.sel) : S.sel.delete(c.dataset.sel); render(); return; }
   const g = e.target.closest("[data-one]"); if (g) openPlan([g.dataset.one]);
+  const mk = e.target.closest("[data-make]"); if (mk) makeFaceless(S.rows.find(r => r.id === mk.dataset.make));
   const ed = e.target.closest("[data-edit]"); if (ed) openEdit(S.rows.find(r => r.id === ed.dataset.edit));
 };
 $("#bShoot").onclick = () => openPlan(S.rows.filter(r => S.sel.has(r.id)).map(r => r.id));
@@ -506,7 +524,7 @@ const idb = (() => {
   const tx = async (mode, fn) => { const d = await db(); return new Promise((ok, ko) => { const t = d.transaction("takes", mode); const req = fn(t.objectStore("takes")); t.oncomplete = () => ok(req?.result); t.onerror = () => ko(t.error); }); };
   return { put: v => tx("readwrite", s => s.put(v)).catch(() => {}), del: k => tx("readwrite", s => s.delete(k)).catch(() => {}), all: () => tx("readonly", s => s.getAll()).catch(() => []) };
 })();
-const saveQ = q => idb.put({ key: q.key, r: q.r, blob: q.blob, ext: q.ext, date: q.date, t: q.t, file: q.file || "" });
+const saveQ = q => idb.put({ key: q.key, r: q.r, blob: q.blob, ext: q.ext, date: q.date, t: q.t, file: q.file || "", prod: q.prod || "cam" });
 async function resumeQueue() {
   for (const v of await idb.all() || []) {
     if (S.queue.some(q => q.key === v.key)) continue;
@@ -519,8 +537,8 @@ function renderQueue() {
     `<div class="q"><span dir="auto">${esc(q.r.name)}</span><span class="st ${q.ok ? "ok" : q.err ? "bad" : ""}">${esc(q.state)}${q.err ? ` <button class="ghost" data-retry="${i}" style="padding:4px 10px">Réessayer</button>` : ""}</span></div>`).join("");
 }
 $("#queue").onclick = e => { const b = e.target.closest("[data-retry]"); if (b) { const q = S.queue[+b.dataset.retry]; q.err = false; runQueue(q); } };
-function enqueue(r, blob, mime, date) {
-  const q = { key: r.id + "-" + Date.now(), r, blob, ext: /mp4/.test(mime) ? "mp4" : /quicktime/.test(mime) ? "mov" : "webm", date, t: String(Math.floor(Date.now() / 1000)), state: "en attente", ok: false, err: false };
+function enqueue(r, blob, mime, date, prod = "cam") {
+  const q = { key: r.id + "-" + Date.now(), r, blob, prod, ext: /mp4/.test(mime) ? "mp4" : /quicktime/.test(mime) ? "mov" : "webm", date, t: String(Math.floor(Date.now() / 1000)), state: "en attente", ok: false, err: false };
   S.queue.push(q); renderQueue(); saveQ(q).then(() => runQueue(q));
 }
 function setQ(q, state) { q.state = state; renderQueue(); }
@@ -551,7 +569,7 @@ async function runQueue(q) {
       q.file = up.file; saveQ(q);
     }
     setQ(q, "programmation…");
-    await api("done", { id: q.r.id, file: q.file, date: q.date });
+    await api("done", { id: q.r.id, file: q.file, date: q.date, prod: q.prod || "cam", sub: store.get("subs", true) ? "1" : "", lang: isAr(q.r) ? "ar" : "fr" });
     q.ok = true; q.blob = null; idb.del(q.key);
     const when = new Date(q.date);
     setQ(q, when - Date.now() < 60000 ? "✓ part dans ~15 min" : "✓ " + when.toLocaleString("fr-FR", { weekday: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }));
@@ -605,6 +623,10 @@ $("#bNew").onclick = () => {
   $("#sheet").innerHTML = `<div class="sheet"><div>
     <h2 style="margin:0 0 4px">Nouveaux scripts avec Claude</h2>
     <div class="small">Ils arrivent dans ta liste « à tourner », avec description et hashtags.</div>
+    <label>Format</label>
+    <div class="seg" id="gMode" style="width:100%"><button data-m="cam" style="flex:1">🎥 Face caméra</button><button data-m="fx" style="flex:1">🎞 Sans visage</button></div>
+    <div id="gStyleBox" hidden><label>Style visuel</label><select id="gStyle">${Object.entries(STYLES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join("")}</select>
+      <div class="small" style="margin-top:4px">Voix off = ta voix clonée · images IA · étiquette IA cochée automatiquement.</div></div>
     <label>Sujet ou idée</label><textarea id="gTopic" rows="3" dir="auto" placeholder="ex. 3 mythes sur la nicotine">${esc(o.topic)}</textarea>
     <div class="row"><div><label>Langue</label><select id="gLang"><option value="Francais">Français</option><option value="عربي">عربي</option></select></div>
       <div><label>Combien</label><select id="gN">${[1, 2, 3, 4, 5].map(n => `<option>${n}</option>`).join("")}</select></div>
@@ -614,14 +636,20 @@ $("#bNew").onclick = () => {
     <div id="gOut"></div>
   </div></div>`;
   $("#gLang").value = o.lang; $("#gN").value = o.n; $("#gSec").value = o.sec; $("#gPromo").checked = o.promo;
+  let mode = o.mode || "cam";
+  const setMode = m => { mode = m; document.querySelectorAll("#gMode button").forEach(b => b.classList.toggle("on", b.dataset.m === m)); $("#gStyleBox").hidden = m !== "fx"; $("#gStyle").value = o.style || defStyle($("#gLang").value); };
+  $("#gMode").onclick = e => { const m = e.target.closest("[data-m]")?.dataset.m; if (m) setMode(m); };
+  $("#gLang").onchange = () => { if (!o.style) $("#gStyle").value = defStyle($("#gLang").value); };
+  setMode(mode);
   $("#gCancel").onclick = () => $("#sheet").innerHTML = "";
   $("#gGo").onclick = async () => {
-    const opt = { topic: $("#gTopic").value.trim(), lang: $("#gLang").value, n: +$("#gN").value, sec: +$("#gSec").value, promo: $("#gPromo").checked };
+    const opt = { topic: $("#gTopic").value.trim(), lang: $("#gLang").value, n: +$("#gN").value, sec: +$("#gSec").value, promo: $("#gPromo").checked, mode, style: mode === "fx" ? $("#gStyle").value : o.style };
+    if (mode === "fx") opt.n = Math.min(opt.n, 3);
     if (!opt.topic) { toast("Écris un sujet."); return; }
     store.set("gen", opt);
     const btn = $("#gGo"); btn.disabled = true; btn.textContent = "Claude écrit…";
     try {
-      const out = await api("gen", { prompt: scriptsPrompt(opt) });
+      const out = await api("gen", { prompt: mode === "fx" ? facelessPrompt(opt) : scriptsPrompt(opt) });
       let arr = parseJSON(out.text); if (!Array.isArray(arr)) arr = arr ? [arr] : [];
       if (!arr.length) throw new Error("réponse illisible, réessaie");
       let done = 0;
@@ -629,16 +657,142 @@ $("#bNew").onclick = () => {
         btn.textContent = `Enregistrement ${++done}/${arr.length}…`;
         await api("create", { props: JSON.stringify({
           Name: { title: [{ text: { content: String(s.title || opt.topic).slice(0, 200) } }] },
-          Script: rt(s.script), Description: rt(s.description), Hashtags: rt(s.hashtags), "Texte écran": rt(s.hook),
+          Script: rt(mode === "fx" ? (s.scenes || []).map(x => x.text).join("\n") : s.script), Description: rt(s.description), Hashtags: rt(s.hashtags), "Texte écran": rt(s.hook),
+          ...(mode === "fx" ? { "Scènes": rt(JSON.stringify({ style: opt.style, scenes: (s.scenes || []).map(x => ({ text: String(x.text || ""), image: String(x.image || "") })) })), Production: { select: { name: "Visuels IA" } } } : {}),
           Type: { select: { name: "Short" } }, Language: { select: { name: opt.lang } },
           Channel: { select: { name: opt.lang === "عربي" ? "Dr Fehmi AR" : "Fehmi Tlaies FR" } },
           "Pipeline Stage": { select: { name: "Script" } }, "Promo app": { checkbox: opt.promo }
         }) });
       }
-      $("#sheet").innerHTML = ""; toast(`${done} script${done > 1 ? "s" : ""} ajouté${done > 1 ? "s" : ""}.`); load();
+      $("#sheet").innerHTML = ""; toast(mode === "fx" ? `${done} vidéo${done > 1 ? "s" : ""} sans visage prête${done > 1 ? "s" : ""} : appuie sur 🎞 pour produire.` : `${done} script${done > 1 ? "s" : ""} ajouté${done > 1 ? "s" : ""}.`); load();
     } catch (e) { btn.disabled = false; btn.textContent = "Écrire"; $("#gOut").innerHTML = `<div class="err">${esc(e.message)}</div>`; }
   };
 };
+
+/* ---------- sans visage : voix clonée (MiniMax via fal) + images (nano-banana) + montage canvas ---------- */
+const VOICE_ID = "Voice400a363b1792873199";      // voix clonée de Fehmi (fal / MiniMax)
+const STYLES = {
+  ombre: { label: "Ombres & rouge", prompt: "minimalist dark editorial illustration, flat vector style, charcoal grey background with soft vignette, simple faceless grey human figures with round heads and thin limbs, a single glowing red accent, dramatic spotlight, lots of negative space, cinematic, vertical 9:16 composition, no text, no letters" },
+  neon: { label: "Néon 3D", prompt: "holographic 3D wireframe render, glowing neon mesh lines, teal and gold neon on deep navy black background, human figures made of luminous grid lines, cinematic lighting, depth of field, vertical 9:16 composition, no text, no letters" }
+};
+const defStyle = lang => lang === "عربي" ? "neon" : "ombre";
+async function falRun(model, input) {
+  const r = await api("fal", { model, input: JSON.stringify(input) });
+  if (r.status !== 200) throw new Error(`fal ${r.status} : ${JSON.stringify(r.data).slice(0, 140)}`);
+  return r.data;
+}
+const loadImg = url => new Promise((ok, ko) => { const i = new Image(); i.crossOrigin = "anonymous"; i.onload = () => ok(i); i.onerror = () => ko(new Error("image illisible")); i.src = url; });
+const FX = { cache: {}, ac: null, rec: null, blob: null, mime: "", lock: null };
+function fxSteps(list) { $("#fxSteps").innerHTML = list.map(([t, st]) => `<div>${st === "ok" ? "✓" : st === "run" ? "⏳" : st === "err" ? "⚠️" : "·"} ${esc(t)}</div>`).join(""); }
+function fxButtons(html, handlers) { $("#fxBtns").innerHTML = html; for (const [id, fn] of Object.entries(handlers)) $("#" + id).onclick = fn; }
+function closeFx() { try { FX.rec?.stop(); } catch {} FX.rec = null; try { FX.lock?.release(); } catch {} $("#fx").classList.remove("on"); $("#fxv").removeAttribute("src"); render(); }
+async function makeFaceless(r, redoImages = false) {
+  if (!r?.fx) return;
+  if (!canComposite() || !window.MediaRecorder) { toast("Ce navigateur ne peut pas monter la vidéo. Ouvre le Studio dans Safari."); return; }
+  FX.ac = FX.ac || new (window.AudioContext || window.webkitAudioContext)();
+  try { await FX.ac.resume(); } catch {}
+  $("#fx").classList.add("on"); $("#fxv").style.display = "none"; $("#fxc").style.display = "block";
+  $("#fxTitle").textContent = r.name; fxButtons(`<button class="ghost" id="fxClose">Fermer</button>`, { fxClose: closeFx });
+  try { FX.lock = await navigator.wakeLock?.request("screen"); } catch {}
+  const scenes = r.fx.scenes, style = STYLES[r.fx.style] ? r.fx.style : defStyle(r.lang);
+  const c = FX.cache[r.id] = FX.cache[r.id] || {};
+  if (redoImages) c.imgs = null;
+  const steps = [["Voix off (ta voix clonée)", c.audio ? "ok" : "run"], [`Images ${STYLES[style].label} (${scenes.length})`, c.imgs ? "ok" : "wait"], ["Montage", "wait"]];
+  fxSteps(steps);
+  try {
+    if (!c.audio) {
+      const d = await falRun("fal-ai/minimax/speech-02-hd", {
+        text: scenes.map(s => s.text).join(" <#0.3#> "),
+        voice_setting: { voice_id: VOICE_ID, speed: 1.05, vol: 1, pitch: 0, emotion: "neutral" },
+        language_boost: isAr(r) ? "Arabic" : "French", output_format: "url"
+      });
+      c.audio = d.audio?.url; if (!c.audio) throw new Error("voix non générée");
+    }
+    steps[0][1] = "ok"; steps[1][1] = "run"; fxSteps(steps);
+    if (!c.imgs) {
+      let done = 0;
+      c.imgs = await Promise.all(scenes.map(async sc => {
+        const prompt = `${sc.image}, ${STYLES[style].prompt}`;
+        let url;
+        try { url = (await falRun("fal-ai/nano-banana", { prompt, num_images: 1, aspect_ratio: "9:16" })).images?.[0]?.url; }
+        catch { url = (await falRun("fal-ai/flux/schnell", { prompt, num_images: 1, image_size: "portrait_16_9" })).images?.[0]?.url; }
+        steps[1][0] = `Images ${STYLES[style].label} (${++done}/${scenes.length})`; fxSteps(steps);
+        return url;
+      }));
+    }
+    steps[1][1] = "ok"; steps[2][1] = "run"; fxSteps(steps);
+    const [imgs, buf] = await Promise.all([
+      Promise.all(c.imgs.map(loadImg)),
+      fetch(c.audio).then(x => x.arrayBuffer()).then(b => new Promise((ok, ko) => FX.ac.decodeAudioData(b, ok, ko)))
+    ]);
+    await renderFaceless(r, scenes, imgs, buf, t => { steps[2][0] = `Montage ${Math.floor(t)} / ${Math.ceil(buf.duration)} s — garde l'écran allumé`; fxSteps(steps); });
+    steps[2][0] = "Montage"; steps[2][1] = "ok"; fxSteps(steps);
+    const v = $("#fxv"); v.src = URL.createObjectURL(FX.blob); v.style.display = "block"; $("#fxc").style.display = "none";
+    fxButtons(`<button class="ghost" id="fxRedo">↺ Autres images</button><button class="pri" id="fxKeep">✓ Garder & publier</button>`, {
+      fxRedo: () => makeFaceless(r, true),
+      fxKeep: () => {
+        if (FX.blob.size > MAX_BYTES) { toast("Vidéo trop lourde (> 150 Mo)."); return; }
+        enqueue(r, FX.blob, FX.mime, publishDate(r, store.get("plan", { mode: "now", time: "18:00" })), "ia");
+        FX.blob = null; delete FX.cache[r.id]; closeFx(); toast("Envoi lancé — sous-titres ajoutés automatiquement, étiquette IA cochée.");
+      }
+    });
+  } catch (e) {
+    const i = steps.findIndex(x => x[1] === "run"); if (i >= 0) steps[i][1] = "err"; fxSteps(steps);
+    fxButtons(`<button class="ghost" id="fxClose2">Fermer</button><button class="pri" id="fxRetry">Réessayer</button>`, { fxClose2: closeFx, fxRetry: () => makeFaceless(r) });
+    toast(e.message);
+  }
+}
+function renderFaceless(r, scenes, imgs, buf, onTick) {
+  return new Promise((resolve, reject) => {
+    const cv = $("#fxc"), x = cv.getContext("2d"), W = 1080, H = 1920, ac = FX.ac;
+    const total = buf.duration + 0.6, XF = 0.35;
+    const wts = scenes.map(s => Math.max(8, s.text.length)), sum = wts.reduce((a, b) => a + b, 0);
+    let acc = 0; const seg = wts.map(w => { const a = acc; acc += w / sum * buf.duration; return [a, acc]; }); seg[seg.length - 1][1] = total;
+    const dest = ac.createMediaStreamDestination(), src = ac.createBufferSource(); src.buffer = buf; src.connect(dest);
+    FX.mime = pickMime(); const chunks = [];
+    const stream = new MediaStream([...cv.captureStream(30).getVideoTracks(), ...dest.stream.getAudioTracks()]);
+    try { FX.rec = new MediaRecorder(stream, FX.mime ? { mimeType: FX.mime, videoBitsPerSecond: 6_000_000 } : undefined); } catch { FX.rec = new MediaRecorder(stream); }
+    FX.mime = FX.rec.mimeType || FX.mime || "video/mp4";
+    FX.rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+    FX.rec.onstop = () => { FX.blob = new Blob(chunks, { type: FX.mime }); FX.rec ? resolve() : reject(new Error("montage interrompu")); FX.rec = null; };
+    C.hook = (r.hook || "").trim(); C.ar = isAr(r);
+    const drawImg = (img, p, i, alpha) => {
+      const z = i % 2 ? 1.16 - 0.10 * p : 1.06 + 0.10 * p, dx = (i % 3 - 1) * 0.03 * W * p;
+      const s0 = Math.max(W / img.width, H / img.height) * z, w = img.width * s0, h = img.height * s0;
+      x.globalAlpha = alpha; x.drawImage(img, (W - w) / 2 + dx, (H - h) / 2, w, h); x.globalAlpha = 1;
+    };
+    const shade = x.createLinearGradient(0, H * 0.6, 0, H); shade.addColorStop(0, "rgba(0,0,0,0)"); shade.addColorStop(1, "rgba(0,0,0,.55)");
+    let t0 = 0, lastTick = -1;
+    const frame = () => {
+      if (!FX.rec) return;
+      const t = ac.currentTime - t0;
+      x.fillStyle = "#000"; x.fillRect(0, 0, W, H);
+      let i = seg.findIndex(([a, b]) => t < b); if (i < 0) i = seg.length - 1;
+      const [a, b] = seg[i], p = Math.min(1, (t - a) / (b - a));
+      drawImg(imgs[i], p, i, 1);
+      if (i + 1 < seg.length && t > b - XF) drawImg(imgs[i + 1], 0, i + 1, (t - (b - XF)) / XF);
+      x.fillStyle = shade; x.fillRect(0, H * 0.6, W, H * 0.4);
+      if (C.hook && t * 1000 < HOOK_MS) drawHook(x, W, H, t * 1000);
+      if (Math.floor(t) !== lastTick) { lastTick = Math.floor(t); onTick(t); }
+      if (t >= total) { const rec = FX.rec; FX.rec = rec; rec.stop(); return; }
+      requestAnimationFrame(frame);
+    };
+    x.fillStyle = "#000"; x.fillRect(0, 0, W, H); drawImg(imgs[0], 0, 0, 1);
+    FX.rec.start(1000); t0 = ac.currentTime + 0.05; src.start(t0); requestAnimationFrame(frame);
+  });
+}
+function facelessPrompt(o) {
+  return `Tu écris des vidéos courtes SANS VISAGE (voix off + illustrations animées) pour le Dr Fehmi, médecin : santé mentale, anxiété, sommeil, arrêt du tabac, IA en santé. La voix off est la sienne.
+Écris ${o.n} vidéo${o.n > 1 ? "s" : ""} DIFFÉRENTE${o.n > 1 ? "S" : ""} sur : ${o.topic}
+Langue de la voix off : ${o.lang === "عربي" ? "arabe tunisien (darija) naturel et clair" : "français parlé, tutoiement"}.
+Durée : ${o.sec} secondes (~${Math.round(o.sec * 2.4)} mots au total).
+${RETENTION}
+Découpe en 6 à 9 scènes. Chaque scène = 1 ou 2 phrases de voix off + une description d'image EN ANGLAIS : une seule idée visuelle concrète ou une métaphore forte, personnages sans visage détaillé, aucun texte dans l'image, rien de choquant.
+La 1re scène porte l'accroche et doit avoir l'image la plus intrigante.
+${o.promo ? "Mentionne naturellement son app « Vague » pour arrêter de fumer." : "Pas de promotion."}
+Ne donne pas de conseil médical dangereux ; reste factuel et prudent.
+Réponds UNIQUEMENT en JSON : [{"title": "titre YouTube 60 caractères max", "hook": "texte écran 3 à 6 mots", "description": "2-3 phrases + question, sans hashtags", "hashtags": "5 à 8 hashtags", "scenes": [{"text": "voix off", "image": "english visual description"}]}]`;
+}
 
 render();
 if (KEY) { load(); resumeQueue(); } else { S.loading = false; render(); }
