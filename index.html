@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Studio">
+<meta name="theme-color" content="#0f1115">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon.svg">
+<title>Fehmi Studio</title>
+<style>
+/* Mise en page : une liste de scripts à tourner, une feuille « Nouveau script », un plateau plein écran (caméra + prompteur) et une file d'envoi. */
+:root{--bg:#0f1115;--card:#181b22;--line:#2a2f3a;--txt:#eef0f4;--mut:#9aa3b2;--acc:#ff4d5e;--ok:#3ecf8e;--warn:#f5b84b;--r:14px;color-scheme:dark}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--txt);font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans Arabic",sans-serif}
+body{padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+button{font:inherit;color:inherit;border:0;border-radius:12px;padding:12px 16px;background:#262b36;cursor:pointer}
+button.pri{background:var(--acc);color:#fff;font-weight:600}
+button.ghost{background:transparent;border:1px solid var(--line)}
+button:disabled{opacity:.45}
+input,textarea,select{font:inherit;color:var(--txt);background:#11141a;border:1px solid var(--line);border-radius:10px;padding:10px 12px;width:100%}
+textarea{resize:vertical}
+label{display:block;font-size:13px;color:var(--mut);margin:12px 0 4px}
+.wrap{max-width:720px;margin:0 auto;padding:12px 16px 120px}
+header{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 0 12px}
+h1{font-size:22px;margin:0}
+.seg{display:flex;background:#151820;border:1px solid var(--line);border-radius:12px;padding:3px;gap:3px}
+.seg button{padding:7px 12px;border-radius:9px;background:transparent;font-size:14px}
+.seg button.on{background:#2c3240}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;margin:10px 0;display:flex;gap:12px;align-items:flex-start}
+.card input[type=checkbox]{width:24px;height:24px;margin-top:2px;flex:none;accent-color:var(--acc)}
+.card .b{flex:1;min-width:0}
+.card .t{font-weight:600;margin-bottom:4px;overflow-wrap:anywhere}
+.meta{display:flex;flex-wrap:wrap;gap:6px;font-size:12px;color:var(--mut)}
+.pill{border:1px solid var(--line);border-radius:99px;padding:1px 8px}
+.pill.warn{border-color:var(--warn);color:var(--warn)}
+.pill.ok{border-color:var(--ok);color:var(--ok)}
+.go{flex:none;padding:10px 14px}
+.bar{position:fixed;left:0;right:0;bottom:0;padding:12px 16px calc(12px + env(safe-area-inset-bottom));background:rgba(15,17,21,.94);backdrop-filter:blur(10px);border-top:1px solid var(--line);display:flex;gap:10px;justify-content:center;z-index:5}
+.bar button{flex:1;max-width:340px}
+.empty{color:var(--mut);text-align:center;padding:40px 10px}
+.err{background:#3a1a1f;border:1px solid #6b2a33;color:#ffd5da;border-radius:12px;padding:10px 12px;margin:10px 0}
+.sheet{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:20;display:flex;align-items:flex-end;justify-content:center}
+.sheet>div{background:var(--card);width:100%;max-width:720px;max-height:92vh;overflow:auto;border-radius:18px 18px 0 0;padding:16px 16px calc(20px + env(safe-area-inset-bottom))}
+.row{display:flex;gap:10px;align-items:center}
+.row>*{flex:1}
+.small{font-size:13px;color:var(--mut)}
+.toast{position:fixed;left:50%;top:calc(14px + env(safe-area-inset-top));transform:translateX(-50%);background:#262b36;border:1px solid var(--line);padding:10px 16px;border-radius:12px;z-index:60;max-width:90vw}
+.queue{margin-top:18px}
+.q{font-size:14px;display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.q .st{color:var(--mut);white-space:nowrap}
+.q .st.ok{color:var(--ok)}.q .st.bad{color:var(--acc)}
+/* plateau */
+#stage{position:fixed;inset:0;background:#000;z-index:40;display:none}
+#stage.on{display:block}
+#cam,#play{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
+#cam{transform:scaleX(-1)}
+#play{display:none}
+#prompt{position:absolute;left:0;right:0;top:0;height:42%;overflow:hidden;background:linear-gradient(rgba(0,0,0,.72),rgba(0,0,0,.55) 80%,rgba(0,0,0,0));padding:calc(12px + env(safe-area-inset-top)) 18px 0}
+#ptext{white-space:pre-wrap;font-weight:600;line-height:1.35;will-change:transform;text-shadow:0 1px 2px #000}
+#ptext.ar{direction:rtl;text-align:right;font-family:"Noto Sans Arabic","Geeza Pro",sans-serif}
+#guide{position:absolute;left:0;right:0;top:calc(env(safe-area-inset-top) + 64px);border-top:2px solid rgba(255,77,94,.55);pointer-events:none}
+#hud{position:absolute;left:0;right:0;bottom:0;padding:12px 16px calc(16px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:10px;background:linear-gradient(rgba(0,0,0,0),rgba(0,0,0,.7) 35%)}
+#hud .row button{padding:10px}
+#rec{width:78px;height:78px;border-radius:50%;background:transparent;border:5px solid #fff;padding:0;flex:none;display:grid;place-items:center;margin:0 auto}
+#rec i{display:block;width:56px;height:56px;border-radius:50%;background:var(--acc);transition:.2s}
+#rec.on i{width:30px;height:30px;border-radius:8px}
+#count{position:absolute;inset:0;display:none;place-items:center;font-size:120px;font-weight:800;color:#fff;text-shadow:0 2px 12px #000;pointer-events:none}
+#info{position:absolute;right:12px;top:calc(46% );background:rgba(0,0,0,.55);border-radius:10px;padding:4px 10px;font-size:13px}
+#info .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--acc);margin-right:6px;animation:bl 1s infinite}
+@keyframes bl{50%{opacity:.2}}
+#review{display:none;gap:10px}
+.hudtop{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:14px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🎬 Studio</h1>
+    <div class="seg" id="langSeg">
+      <button data-l="all">Tout</button><button data-l="Francais">FR</button><button data-l="عربي">AR</button>
+    </div>
+  </header>
+  <div id="msg"></div>
+  <div id="list"></div>
+  <div class="queue" id="queue"></div>
+</div>
+
+<div class="bar">
+  <button class="ghost" id="bNew">＋ Scripts</button>
+  <button class="pri" id="bShoot" disabled>Tourner (0)</button>
+</div>
+
+<!-- plateau : caméra + prompteur -->
+<div id="stage">
+  <video id="cam" playsinline muted autoplay></video>
+  <video id="play" playsinline controls></video>
+  <div id="prompt"><div id="ptext"></div></div>
+  <div id="guide"></div>
+  <div id="count"></div>
+  <div id="info" hidden></div>
+  <div id="hud">
+    <div class="hudtop"><span id="hTitle"></span><span id="hPos"></span></div>
+    <div id="live">
+      <div class="row">
+        <button id="sSlow" aria-label="Plus lent">🐢</button>
+        <button id="sFast" aria-label="Plus rapide">🐇</button>
+        <button id="fMinus" aria-label="Texte plus petit">A−</button>
+        <button id="fPlus" aria-label="Texte plus grand">A＋</button>
+        <button id="pPause" aria-label="Pause du prompteur">⏯</button>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button class="ghost" id="sClose">Fermer</button>
+        <button id="rec" aria-label="Enregistrer"><i></i></button>
+        <button class="ghost" id="sSkip">Passer</button>
+      </div>
+    </div>
+    <div id="review" class="row">
+      <button class="ghost" id="rRedo">↺ Refaire</button>
+      <button class="pri" id="rKeep">✓ Garder & publier</button>
+    </div>
+  </div>
+</div>
+
+<div id="sheet"></div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const API = "https://hook.eu1.make.com/0jj57vomxlae4srwpwj6m74kdrkk24p2";
+const VIDEO_TYPES = ["Short", "Video", "Video Long", "TikTok", "Youtube"];
+const MAX_BYTES = 150 * 1024 * 1024;           // limite d'un lien d'envoi Dropbox
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("studio." + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("studio." + k, JSON.stringify(v)); } catch {} }
+};
+
+/* ---------- clé d'accès : arrive une fois par le lien #k=… ---------- */
+(() => {
+  const m = location.hash.match(/k=([0-9a-f]{32})/);
+  if (m) { store.set("key", m[1]); history.replaceState(null, "", location.pathname); }
+})();
+const KEY = store.get("key", "");
+
+const S = { rows: [], lang: store.get("lang", "all"), sel: new Set(), queue: [], loading: true };
+
+function toast(m, ms = 3000) { const t = $("#toast"); t.textContent = m; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => t.hidden = true, ms); }
+
+async function api(a, fields = {}) {
+  const body = new URLSearchParams({ k: KEY, a, ...fields });
+  const r = await fetch(API, { method: "POST", body });
+  const txt = await r.text();
+  let j; try { j = JSON.parse(txt); } catch { throw new Error(txt === "Accepted" ? "Clé d'accès refusée — rouvre le lien d'installation." : "Réponse inattendue : " + txt.slice(0, 120)); }
+  if (j && j.status && j.status >= 300) throw new Error("Notion a refusé (" + j.status + ")");
+  return j;
+}
+
+/* ---------- données ---------- */
+const plain = arr => (arr || []).map(t => t.plain_text).join("");
+const spoken = s => String(s || "").replace(/^\s*\[[^\]]*\]\s*$/gm, "").replace(/\[[^\]]*\]/g, "").replace(/\*\*/g, "").replace(/\n{3,}/g, "\n\n").trim();
+function row(p) {
+  const pr = p.properties || {};
+  return {
+    id: p.id.replace(/-/g, ""),
+    name: plain(pr.Name?.title) || "Sans titre",
+    lang: pr.Language?.select?.name || "",
+    type: pr.Type?.select?.name || "",
+    script: spoken(plain(pr.Script?.rich_text)),
+    desc: plain(pr.Description?.rich_text),
+    tags: plain(pr.Hashtags?.rich_text),
+    promo: !!pr["Promo app"]?.checkbox
+  };
+}
+async function load() {
+  S.loading = true; render();
+  try {
+    const res = await api("list");
+    S.rows = (Array.isArray(res) ? res : []).map(row).filter(r => VIDEO_TYPES.includes(r.type) && r.script.length > 10);
+    S.err = null;
+  } catch (e) { S.err = e.message; }
+  S.loading = false; render();
+}
+
+/* ---------- liste ---------- */
+const isAr = r => r.lang === "عربي";
+const mins = s => Math.max(1, Math.round(s.split(/\s+/).length / 150 * 60));
+function render() {
+  document.querySelectorAll("#langSeg button").forEach(b => b.classList.toggle("on", b.dataset.l === S.lang));
+  const msg = $("#msg");
+  if (!KEY) { msg.innerHTML = `<div class="err">Ouvre d'abord le lien d'installation (celui avec <b>#k=</b>) pour connecter le Studio.</div>`; }
+  else msg.innerHTML = S.err ? `<div class="err">${esc(S.err)} <button class="ghost" onclick="load()">Réessayer</button></div>` : "";
+  const rows = S.rows.filter(r => S.lang === "all" || r.lang === S.lang);
+  $("#list").innerHTML = S.loading ? `<div class="empty">Chargement des scripts…</div>` :
+    !rows.length ? `<div class="empty">Aucun script à tourner. Appuie sur « ＋ Scripts ».</div>` :
+    rows.map(r => `<div class="card">
+      <input type="checkbox" data-sel="${r.id}" ${S.sel.has(r.id) ? "checked" : ""} aria-label="Ajouter au tournage">
+      <div class="b"><div class="t" dir="auto">${esc(r.name)}</div>
+        <div class="meta"><span class="pill">${isAr(r) ? "AR" : r.lang === "Francais" ? "FR" : esc(r.lang || "?")}</span>
+        <span class="pill">~${mins(r.script)} s</span>
+        ${r.desc && r.tags ? `<span class="pill ok">texte prêt</span>` : `<span class="pill warn">texte auto</span>`}
+        ${r.promo ? `<span class="pill">promo app</span>` : ""}</div></div>
+      <button class="go" data-one="${r.id}" aria-label="Tourner ce script">▶</button></div>`).join("");
+  const n = S.sel.size;
+  $("#bShoot").textContent = `Tourner (${n})`; $("#bShoot").disabled = !n;
+  renderQueue();
+}
+$("#langSeg").onclick = e => { const l = e.target.dataset.l; if (!l) return; S.lang = l; store.set("lang", l); render(); };
+$("#list").onclick = e => {
+  const c = e.target.closest("[data-sel]"); if (c) { c.checked ? S.sel.add(c.dataset.sel) : S.sel.delete(c.dataset.sel); render(); return; }
+  const g = e.target.closest("[data-one]"); if (g) openPlan([g.dataset.one]);
+};
+$("#bShoot").onclick = () => openPlan(S.rows.filter(r => S.sel.has(r.id)).map(r => r.id));
+
+/* ---------- plan de publication du lot ---------- */
+function nextSlot(base, hhmm) {
+  const [h, m] = hhmm.split(":").map(Number); const d = new Date(base); d.setHours(h, m, 0, 0);
+  if (d <= base) d.setDate(d.getDate() + 1); return d;
+}
+function openPlan(ids) {
+  const plan = store.get("plan", { mode: "now", time: "18:00" });
+  $("#sheet").innerHTML = `<div class="sheet"><div>
+    <h2 style="margin:0 0 4px">Tournage de ${ids.length} vidéo${ids.length > 1 ? "s" : ""}</h2>
+    <div class="small">Chaque prise gardée part toute seule sur TikTok + YouTube (FR → Tunigeek / Fehmi Tlaies, AR → dr.fehmi / Dr. Fehmi), sans étiquette IA.</div>
+    <label>Quand publier ?</label>
+    <select id="pMode"><option value="now">Dès que la vidéo est envoyée</option><option value="daily">Une par jour (par langue), à l'heure choisie</option></select>
+    <label>Heure</label><input type="time" id="pTime" value="${esc(plan.time)}">
+    <div class="row" style="margin-top:18px"><button class="ghost" id="pCancel">Annuler</button><button class="pri" id="pGo">Ouvrir la caméra</button></div>
+  </div></div>`;
+  $("#pMode").value = plan.mode;
+  $("#pCancel").onclick = () => $("#sheet").innerHTML = "";
+  $("#pGo").onclick = () => {
+    const p = { mode: $("#pMode").value, time: $("#pTime").value || "18:00" }; store.set("plan", p);
+    $("#sheet").innerHTML = ""; startShoot(ids, p);
+  };
+}
+function publishDate(r, plan) {
+  if (plan.mode === "now") return new Date().toISOString();
+  const last = store.get("slot." + r.lang, 0);
+  const base = new Date(Math.max(Date.now(), last));
+  const d = nextSlot(base, plan.time); store.set("slot." + r.lang, d.getTime());
+  return d.toISOString();
+}
+
+/* ---------- plateau : caméra + prompteur ---------- */
+const P = { ids: [], i: 0, plan: null, stream: null, rec: null, chunks: [], blob: null, mime: "", y: 0, speed: store.get("speed", 40), font: store.get("font", 30), run: false, raf: 0, t0: 0, lock: null };
+function pickMime() {
+  for (const m of ["video/mp4;codecs=avc1,mp4a.40.2", "video/mp4", "video/webm;codecs=vp9,opus", "video/webm"])
+    if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m;
+  return "";
+}
+async function startShoot(ids, plan) {
+  if (!window.MediaRecorder || !navigator.mediaDevices?.getUserMedia) { toast("Ce navigateur ne peut pas filmer. Ouvre le Studio dans Safari."); return; }
+  Object.assign(P, { ids, i: 0, plan });
+  try {
+    P.stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "user", width: { ideal: 1080 }, height: { ideal: 1920 }, aspectRatio: { ideal: 9 / 16 }, frameRate: { ideal: 30 } },
+      audio: { echoCancellation: true, noiseSuppression: true }
+    });
+  } catch (e) { toast("Caméra refusée : autorise la caméra et le micro pour ce site dans Réglages › Safari."); return; }
+  $("#cam").srcObject = P.stream;
+  $("#stage").classList.add("on");
+  try { P.lock = await navigator.wakeLock?.request("screen"); } catch {}
+  showTake();
+}
+function cur() { return S.rows.find(r => r.id === P.ids[P.i]); }
+function showTake() {
+  const r = cur(); if (!r) return closeShoot();
+  $("#hTitle").textContent = r.name; $("#hPos").textContent = `${P.i + 1}/${P.ids.length}`;
+  const t = $("#ptext"); t.textContent = r.script; t.className = isAr(r) ? "ar" : ""; t.dir = isAr(r) ? "rtl" : "ltr";
+  t.style.fontSize = P.font + "px"; P.y = 0; t.style.transform = "translateY(0)";
+  $("#play").style.display = "none"; $("#play").removeAttribute("src"); $("#cam").style.display = "block";
+  $("#prompt").style.display = "block"; $("#live").style.display = "block"; $("#review").style.display = "none";
+  $("#rec").classList.remove("on"); $("#info").hidden = true;
+}
+function scrollLoop(ts) {
+  if (!P.last) P.last = ts;
+  const dt = (ts - P.last) / 1000; P.last = ts;
+  if (P.run) {
+    const t = $("#ptext"); const max = Math.max(0, t.scrollHeight - $("#prompt").clientHeight * 0.4);
+    P.y = Math.min(max, P.y + P.speed * dt); t.style.transform = `translateY(${-P.y}px)`;
+  }
+  if (P.rec) { const s = Math.floor((Date.now() - P.t0) / 1000); $("#info").innerHTML = `<span class="dot"></span>${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
+  P.raf = requestAnimationFrame(scrollLoop);
+}
+P.raf = requestAnimationFrame(scrollLoop);
+async function countdown() {
+  const c = $("#count"); c.style.display = "grid";
+  for (const n of [3, 2, 1]) { c.textContent = n; await new Promise(r => setTimeout(r, 800)); }
+  c.style.display = "none";
+}
+$("#rec").onclick = async () => {
+  if (P.rec) { P.rec.stop(); return; }
+  await countdown();
+  P.mime = pickMime(); P.chunks = [];
+  try { P.rec = new MediaRecorder(P.stream, P.mime ? { mimeType: P.mime, videoBitsPerSecond: 5_000_000 } : undefined); }
+  catch { P.rec = new MediaRecorder(P.stream); }
+  P.mime = P.rec.mimeType || P.mime || "video/mp4";
+  P.rec.ondataavailable = e => e.data.size && P.chunks.push(e.data);
+  P.rec.onstop = () => {
+    P.blob = new Blob(P.chunks, { type: P.mime }); P.rec = null; P.run = false;
+    $("#rec").classList.remove("on"); $("#info").hidden = true;
+    const v = $("#play"); v.src = URL.createObjectURL(P.blob); v.style.display = "block"; $("#cam").style.display = "none";
+    $("#prompt").style.display = "none"; $("#live").style.display = "none"; $("#review").style.display = "flex";
+  };
+  P.rec.start(1000); P.t0 = Date.now(); P.run = true; P.last = 0;
+  $("#rec").classList.add("on"); $("#info").hidden = false;
+};
+$("#sSlow").onclick = () => { P.speed = Math.max(10, P.speed - 8); store.set("speed", P.speed); toast("Vitesse " + P.speed, 900); };
+$("#sFast").onclick = () => { P.speed = Math.min(160, P.speed + 8); store.set("speed", P.speed); toast("Vitesse " + P.speed, 900); };
+$("#fMinus").onclick = () => { P.font = Math.max(18, P.font - 3); store.set("font", P.font); $("#ptext").style.fontSize = P.font + "px"; };
+$("#fPlus").onclick = () => { P.font = Math.min(56, P.font + 3); store.set("font", P.font); $("#ptext").style.fontSize = P.font + "px"; };
+$("#pPause").onclick = () => { P.run = !P.run; P.last = 0; };
+$("#prompt").onclick = () => { if (P.rec) { P.run = !P.run; P.last = 0; } };
+$("#sSkip").onclick = () => { if (P.rec) return; P.i++; showTake(); };
+$("#sClose").onclick = () => { if (P.rec) P.rec.stop(); closeShoot(); };
+$("#rRedo").onclick = () => { P.blob = null; showTake(); };
+$("#rKeep").onclick = () => {
+  const r = cur(); if (!r || !P.blob) return;
+  if (P.blob.size > MAX_BYTES) { toast("Vidéo trop lourde (> 150 Mo). Refais une prise plus courte."); return; }
+  enqueue(r, P.blob, P.mime, publishDate(r, P.plan));
+  S.sel.delete(r.id); P.blob = null; P.i++;
+  if (P.i >= P.ids.length) { closeShoot(); toast("Lot terminé — l'envoi continue en bas de la liste."); } else showTake();
+};
+function closeShoot() {
+  if (P.rec) return;
+  P.stream?.getTracks().forEach(t => t.stop()); P.stream = null;
+  try { P.lock?.release(); } catch {}
+  $("#stage").classList.remove("on"); render();
+}
+
+/* ---------- file d'envoi : Dropbox puis programmation Notion ---------- */
+function renderQueue() {
+  if (!S.queue.length) { $("#queue").innerHTML = ""; return; }
+  $("#queue").innerHTML = `<div class="small" style="margin-bottom:4px">Envois — garde le Studio ouvert jusqu'à ✓</div>` + S.queue.map((q, i) =>
+    `<div class="q"><span dir="auto">${esc(q.r.name)}</span><span class="st ${q.ok ? "ok" : q.err ? "bad" : ""}">${esc(q.state)}${q.err ? ` <button class="ghost" data-retry="${i}" style="padding:4px 10px">Réessayer</button>` : ""}</span></div>`).join("");
+}
+$("#queue").onclick = e => { const b = e.target.closest("[data-retry]"); if (b) { const q = S.queue[+b.dataset.retry]; q.err = false; runQueue(q); } };
+function enqueue(r, blob, mime, date) {
+  const q = { r, blob, ext: /mp4/.test(mime) ? "mp4" : /quicktime/.test(mime) ? "mov" : "webm", date, state: "en attente", ok: false, err: false };
+  S.queue.push(q); renderQueue(); runQueue(q);
+}
+function setQ(q, state) { q.state = state; renderQueue(); }
+function putFile(link, blob, onp) {
+  return new Promise((ok, ko) => {
+    const x = new XMLHttpRequest(); x.open("POST", link); x.setRequestHeader("Content-Type", "application/octet-stream");
+    x.upload.onprogress = e => e.lengthComputable && onp(Math.round(e.loaded / e.total * 100));
+    x.onload = () => x.status < 300 ? ok() : ko(new Error("Dropbox " + x.status));
+    x.onerror = () => ko(new Error("réseau")); x.send(blob);
+  });
+}
+async function ensureText(r) {
+  if (r.desc && r.tags) return;
+  const out = await api("gen", { prompt: metaPrompt(r) });
+  const j = parseJSON(out.text);
+  r.desc = r.desc || String(j?.description || "").slice(0, 1800);
+  r.tags = r.tags || String(j?.hashtags || "").slice(0, 400);
+  await api("update", { id: r.id, props: JSON.stringify({ Description: rt(r.desc), Hashtags: rt(r.tags) }) });
+}
+async function runQueue(q) {
+  try {
+    if (!q.file) {
+      setQ(q, "texte…"); await ensureText(q.r);
+      q.t = q.t || String(Math.floor(Date.now() / 1000));
+      const up = await api("upload", { id: q.r.id, ext: q.ext, t: q.t });
+      if (!up.link) throw new Error("pas de lien d'envoi");
+      await putFile(up.link, q.blob, p => setQ(q, "envoi " + p + " %"));
+      q.file = up.file;
+    }
+    setQ(q, "programmation…");
+    await api("done", { id: q.r.id, file: q.file, date: q.date });
+    q.ok = true; q.blob = null;
+    const when = new Date(q.date);
+    setQ(q, when - Date.now() < 60000 ? "✓ part dans ~15 min" : "✓ " + when.toLocaleString("fr-FR", { weekday: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }));
+    S.rows = S.rows.filter(x => x.id !== q.r.id); render();
+  } catch (e) { q.err = true; setQ(q, "échec : " + e.message); }
+}
+window.addEventListener("beforeunload", e => { if (S.queue.some(q => !q.ok)) { e.preventDefault(); e.returnValue = ""; } });
+
+/* ---------- Claude : scripts et textes de publication ---------- */
+const rt = s => ({ rich_text: String(s || "").match(/[\s\S]{1,1900}/g)?.map(c => ({ text: { content: c } })) || [] });
+function parseJSON(t) {
+  const s = String(t || ""); const a = s.indexOf("["), o = s.indexOf("{");
+  const start = a >= 0 && (o < 0 || a < o) ? a : o; const end = Math.max(s.lastIndexOf("]"), s.lastIndexOf("}"));
+  try { return JSON.parse(s.slice(start, end + 1)); } catch { return null; }
+}
+function metaPrompt(r) {
+  return `Tu écris le texte de publication TikTok/YouTube Shorts d'une vidéo face caméra du Dr Fehmi (médecin, santé mentale, arrêt du tabac, IA en santé).
+Langue : ${isAr(r) ? "arabe (darija tunisienne compréhensible, ou arabe simple)" : "français"}.
+${r.promo ? "La vidéo promeut son app « Vague » pour arrêter de fumer : mentionne-la naturellement." : ""}
+Titre : ${r.name}
+Script : ${r.script.slice(0, 3000)}
+Réponds UNIQUEMENT en JSON : {"description": "2 à 3 phrases accrocheuses + une question pour les commentaires, sans hashtags", "hashtags": "5 à 8 hashtags pertinents séparés par des espaces"}`;
+}
+function scriptsPrompt(o) {
+  return `Tu es l'auteur des vidéos courtes du Dr Fehmi : médecin, santé mentale, anxiété, sommeil, arrêt du tabac, IA en santé. Il filme lui-même face caméra avec un prompteur.
+Écris ${o.n} script${o.n > 1 ? "s" : ""} DIFFÉRENTS sur : ${o.topic}
+Langue : ${o.lang === "عربي" ? "arabe (darija tunisienne naturelle, facile à lire au prompteur)" : "français parlé, phrases courtes"}.
+Durée cible : ${o.sec} secondes à l'oral (~${Math.round(o.sec * 2.5)} mots). Accroche forte dans la 1re phrase, un seul message, appel à l'action à la fin.
+${o.promo ? "Mentionne naturellement son app « Vague » pour arrêter de fumer." : "Pas de promotion."}
+Pas d'indications de mise en scène, pas d'emojis : seulement le texte à dire, avec des retours à la ligne pour respirer.
+Ne donne pas de conseil médical dangereux ; reste factuel et prudent.
+Réponds UNIQUEMENT en JSON : [{"title": "titre court accrocheur", "script": "...", "description": "2-3 phrases + question, sans hashtags", "hashtags": "5 à 8 hashtags"}]`;
+}
+$("#bNew").onclick = () => {
+  const o = store.get("gen", { topic: "", lang: "Francais", n: 3, sec: 45, promo: false });
+  $("#sheet").innerHTML = `<div class="sheet"><div>
+    <h2 style="margin:0 0 4px">Nouveaux scripts avec Claude</h2>
+    <div class="small">Ils arrivent dans ta liste « à tourner », avec description et hashtags.</div>
+    <label>Sujet ou idée</label><textarea id="gTopic" rows="3" dir="auto" placeholder="ex. 3 mythes sur la nicotine">${esc(o.topic)}</textarea>
+    <div class="row"><div><label>Langue</label><select id="gLang"><option value="Francais">Français</option><option value="عربي">عربي</option></select></div>
+      <div><label>Combien</label><select id="gN">${[1, 2, 3, 4, 5].map(n => `<option>${n}</option>`).join("")}</select></div>
+      <div><label>Durée</label><select id="gSec"><option value="30">30 s</option><option value="45">45 s</option><option value="60">60 s</option><option value="90">90 s</option></select></div></div>
+    <label style="display:flex;gap:8px;align-items:center;color:var(--txt)"><input type="checkbox" id="gPromo" style="width:auto"> Promo de l'app Vague (coche « Votre marque »)</label>
+    <div class="row" style="margin-top:18px"><button class="ghost" id="gCancel">Annuler</button><button class="pri" id="gGo">Écrire</button></div>
+    <div id="gOut"></div>
+  </div></div>`;
+  $("#gLang").value = o.lang; $("#gN").value = o.n; $("#gSec").value = o.sec; $("#gPromo").checked = o.promo;
+  $("#gCancel").onclick = () => $("#sheet").innerHTML = "";
+  $("#gGo").onclick = async () => {
+    const opt = { topic: $("#gTopic").value.trim(), lang: $("#gLang").value, n: +$("#gN").value, sec: +$("#gSec").value, promo: $("#gPromo").checked };
+    if (!opt.topic) { toast("Écris un sujet."); return; }
+    store.set("gen", opt);
+    const btn = $("#gGo"); btn.disabled = true; btn.textContent = "Claude écrit…";
+    try {
+      const out = await api("gen", { prompt: scriptsPrompt(opt) });
+      let arr = parseJSON(out.text); if (!Array.isArray(arr)) arr = arr ? [arr] : [];
+      if (!arr.length) throw new Error("réponse illisible, réessaie");
+      let done = 0;
+      for (const s of arr.slice(0, 5)) {
+        btn.textContent = `Enregistrement ${++done}/${arr.length}…`;
+        await api("create", { props: JSON.stringify({
+          Name: { title: [{ text: { content: String(s.title || opt.topic).slice(0, 200) } }] },
+          Script: rt(s.script), Description: rt(s.description), Hashtags: rt(s.hashtags),
+          Type: { select: { name: "Short" } }, Language: { select: { name: opt.lang } },
+          Channel: { select: { name: opt.lang === "عربي" ? "Dr Fehmi AR" : "Fehmi Tlaies FR" } },
+          "Pipeline Stage": { select: { name: "Script" } }, "Promo app": { checkbox: opt.promo }
+        }) });
+      }
+      $("#sheet").innerHTML = ""; toast(`${done} script${done > 1 ? "s" : ""} ajouté${done > 1 ? "s" : ""}.`); load();
+    } catch (e) { btn.disabled = false; btn.textContent = "Écrire"; $("#gOut").innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+  };
+};
+
+render();
+if (KEY) load(); else S.loading = false, render();
+</script>
+</body>
+</html>
