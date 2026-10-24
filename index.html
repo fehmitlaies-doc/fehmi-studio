@@ -294,13 +294,14 @@ async function loadTrack() {
       const pr = p.properties || {};
       return { name: plain(pr.Name?.title) || "Sans titre", lang: pr.Language?.select?.name || "", st: pr["Statut publication"]?.select?.name || "",
         stage: pr["Pipeline Stage"]?.select?.name || "", prod: pr.Production?.select?.name || "", date: pr["Publish Date"]?.date?.start || "",
-        links: (plain(pr["Liens publiés"]?.rich_text) + " " + (pr["Published URL"]?.url || "")).match(/https?:\/\/\S+/g) || [] };
+        links: (plain(pr["Liens publiés"]?.rich_text) + " " + (pr["Published URL"]?.url || "")).match(/https?:\/\/\S+/g) || [], video: (pr.Link?.url || "").replace("www.dropbox.com", "dl.dropboxusercontent.com") };
     }).filter(i => S.lang === "all" || i.lang === S.lang);
     el.innerHTML = !items.length ? `<div class="empty">Rien de programmé pour l'instant.</div>` : items.map(i => {
       const cls = i.st === "Publié" ? "ok" : i.st === "Erreur" ? "warn" : "";
       const d = i.date ? new Date(i.date).toLocaleString("fr-FR", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
       return `<div class="card"><div class="b"><div class="t" dir="auto">${esc(i.name)}</div>
         <div class="meta"><span class="pill">${i.lang === "عربي" ? "AR" : "FR"}</span><span class="pill ${cls}">${esc(i.st || i.stage)}</span>${i.prod ? `<span class="pill">${esc(i.prod)}</span>` : ""}${d ? `<span class="pill">${esc(d)}</span>` : ""}</div>
+        ${i.video ? `<div class="links small" style="margin-top:6px"><a href="${esc(i.video)}" target="_blank" rel="noopener">▶ Voir la vidéo</a></div>` : ""}
         ${i.links.length ? `<div class="links small" style="margin-top:6px">${[...new Set(i.links)].map(u => `<a href="${esc(u)}" target="_blank" rel="noopener">${/tiktok/.test(u) ? "TikTok" : /youtu/.test(u) ? "YouTube" : "lien"}</a>`).join("")}</div>` : ""}
       </div></div>`;
     }).join("") + `<div class="small" style="text-align:center;margin-top:10px">« En attente » part à l'heure prévue (vérifié toutes les 15 min) · « Envoyé » = en cours chez TikTok/YouTube · liens ajoutés automatiquement.</div>`;
