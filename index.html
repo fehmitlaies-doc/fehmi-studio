@@ -75,6 +75,9 @@ h1{font-size:22px;margin:0}
 #review{display:none;gap:10px}
 #ptext{padding-top:52px;padding-bottom:60vh}
 .card .t{cursor:pointer}
+.vbox{margin-top:8px}
+.vbox video{width:100%;max-height:70vh;border-radius:12px;background:#000;display:block;margin-bottom:6px}
+.vbox .vplay{width:100%;padding:10px}
 .links a{color:#8fb8ff;margin-right:10px;word-break:break-all}
 #hookPrev{position:absolute;left:8%;right:8%;top:22%;text-align:center;font-weight:900;font-size:30px;line-height:1.25;pointer-events:none;display:none}
 #hookPrev span{background:#ffe14d;color:#111;padding:2px 10px;border-radius:8px;box-decoration-break:clone;-webkit-box-decoration-break:clone}
@@ -301,12 +304,19 @@ async function loadTrack() {
       const d = i.date ? new Date(i.date).toLocaleString("fr-FR", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
       return `<div class="card"><div class="b"><div class="t" dir="auto">${esc(i.name)}</div>
         <div class="meta"><span class="pill">${i.lang === "عربي" ? "AR" : "FR"}</span><span class="pill ${cls}">${esc(i.st || i.stage)}</span>${i.prod ? `<span class="pill">${esc(i.prod)}</span>` : ""}${d ? `<span class="pill">${esc(d)}</span>` : ""}</div>
-        ${i.video ? `<div class="links small" style="margin-top:6px"><a href="${esc(i.video)}" target="_blank" rel="noopener">▶ Voir la vidéo</a></div>` : ""}
+        ${i.video ? `<div class="vbox" data-v="${esc(i.video)}"><button class="ghost vplay">▶ Regarder${i.st === "Sous-titrage" ? " (sous-titres en cours…)" : ""}</button></div>` : ""}
         ${i.links.length ? `<div class="links small" style="margin-top:6px">${[...new Set(i.links)].map(u => `<a href="${esc(u)}" target="_blank" rel="noopener">${/tiktok/.test(u) ? "TikTok" : /youtu/.test(u) ? "YouTube" : "lien"}</a>`).join("")}</div>` : ""}
       </div></div>`;
     }).join("") + `<div class="small" style="text-align:center;margin-top:10px">« En attente » part à l'heure prévue (vérifié toutes les 15 min) · « Envoyé » = en cours chez TikTok/YouTube · liens ajoutés automatiquement.</div>`;
   } catch (e) { el.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
 }
+// Lecture dans le Studio : le lecteur ne se charge qu'au toucher pour ne pas télécharger toutes les vidéos
+$("#track").addEventListener("click", e => {
+  const box = e.target.closest(".vplay")?.parentElement; if (!box) return;
+  document.querySelectorAll("#track video").forEach(v => v.pause());
+  box.innerHTML = `<video controls playsinline autoplay preload="auto" src="${esc(box.dataset.v)}"></video>
+    <div class="links small"><a href="${esc(box.dataset.v)}" target="_blank" rel="noopener">⤓ Ouvrir / enregistrer</a></div>`;
+});
 
 /* ---------- plan de publication du lot ---------- */
 function nextSlot(base, hhmm) {
