@@ -745,11 +745,12 @@ async function tts(r, text, speed) {
 async function fitVoice(r, text) {
   let a = await tts(r, text, 1.05);
   const D = a.ms <= 7300 ? CLIP_MS[0] : a.ms <= 9700 ? CLIP_MS[1] : CLIP_MS[2];
-  if (a.ms > D - 80) a = await tts(r, text, a.speed * a.ms / (D - 180));
+  let D2 = D;
+  if (a.ms > D - 80) { a = await tts(r, text, a.speed * a.ms / (D - 180)); if (a.ms > D - 40) D2 = CLIP_MS.find(x => x > a.ms + 200) || CLIP_MS[2]; }
   else if (a.ms < D - 700) a = await tts(r, text, Math.max(0.92, a.speed * a.ms / (D - 300)));
-  const pad = (D - a.ms - 40) / 1000;
+  const pad = (D2 - a.ms - 40) / 1000;
   if (pad > 0.12) a = await tts(r, `${text} <#${pad.toFixed(2)}#>`, a.speed);
-  return { ...a, D };
+  return { ...a, D: D2 };
 }
 async function rescene(r) {
   // Anciens scripts : on redécoupe le texte en scènes courtes (image fidèle + mouvement), par morceaux de 3 phrases en parallèle
@@ -774,8 +775,9 @@ async function makeFaceless(r, redoImages = false) {
   $("#fxTitle").textContent = r.name; fxButtons(`<button class="ghost" id="fxClose">Fermer</button>`, { fxClose: closeFx });
   try { FX.lock = await navigator.wakeLock?.request("screen"); } catch {}
   const style = STYLES[r.fx.style] ? r.fx.style : defStyle(r.lang);
-  const c = FX.cache[r.id] = FX.cache[r.id] || {};
+  const c = FX.cache[r.id] = FX.cache[r.id] || store.get("fx." + r.id, {});
   if (redoImages) { c.imgs = null; c.clips = null; }
+  const keep = () => store.set("fx." + r.id, { voice: c.voice, imgs: c.imgs, clips: c.clips, spent: FX.spent, n: c.n });
   FX.spent = c.spent || 0;
   const steps = [["Scènes", "run"], ["Voix off (ta voix clonée)", "wait"], [`Images ${STYLES[style].label}`, "wait"], ["Animation des plans", "wait"], ["Montage", "wait"]];
   const set = (i, st, label) => { steps[i][1] = st; if (label) steps[i][0] = label; fxSteps(steps); };
@@ -791,9 +793,10 @@ async function makeFaceless(r, redoImages = false) {
       else merged.push({ ...sc });
     }
     const scenes = merged, n = scenes.length;
+    if (c.n && c.n !== n) { c.voice = c.imgs = c.clips = null; } c.n = n;
     set(0, "ok", `Scènes (${n})`); set(1, "run");
     if (!c.voice) { let k = 0; c.voice = await pool(scenes, 4, async sc => { const v = await fitVoice(r, sc.text); set(1, "run", `Voix off (${++k}/${n})`); return v; }); }
-    set(1, "ok", "Voix off (ta voix clonée)"); set(2, "run");
+    keep(); set(1, "ok", "Voix off (ta voix clonée)"); set(2, "run");
     const look = `${STYLES[style].prompt}. Recurring character in every scene: ${r.fx.character || STYLES[style].character}`;
     if (!c.imgs) {
       let k = 0;
@@ -806,7 +809,7 @@ async function makeFaceless(r, redoImages = false) {
       });
       c.clips = null;
     }
-    set(2, "ok", `Images ${STYLES[style].label}`); set(3, "run");
+    keep(); set(2, "ok", `Images ${STYLES[style].label}`); set(3, "run");
     if (!c.clips) {
       const first = r.hook ? await hookFrame(c.imgs[0], r) : c.imgs[0];
       let k = 0;
@@ -820,11 +823,11 @@ async function makeFaceless(r, redoImages = false) {
         set(3, "run", `Animation des plans (${++k}/${n})`); return d.video.url;
       });
     }
-    set(3, "ok", "Animation des plans"); set(4, "run");
+    keep(); set(3, "ok", "Animation des plans"); set(4, "run");
     // fal compose met les plans et les voix bout à bout : chaque voix a exactement la durée de son plan
     let t = 0; const vk = [], ak = [];
     scenes.forEach((sc, i) => { const D = c.voice[i].D; vk.push({ url: c.clips[i], timestamp: t, duration: D }); ak.push({ url: c.voice[i].url, timestamp: t, duration: D }); t += D; });
-    const out = await falRun("fal-ai/ffmpeg-api/compose", { tracks: [{ id: "video", type: "video", keyframes: vk }, { id: "voice", type: "audio", keyframes: ak }] });
+    const out = await falQueue("fal-ai/ffmpeg-api/compose", { tracks: [{ id: "video", type: "video", keyframes: vk }, { id: "voice", type: "audio", keyframes: ak }] }, 8000);
     if (!out.video_url) throw new Error("montage serveur échoué");
     c.video = out.video_url;
     const total = c.voice.reduce((a, v) => a + v.D, 0) / 1000;
