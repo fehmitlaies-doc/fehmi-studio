@@ -112,7 +112,7 @@ for w in words:
     cur.append(w)
     if len(cur) == 3 or re.search(r'[.,:?!؟،]$', w['t']): groups.append(cur); cur = []
 if cur: groups.append(cur)
-HOT = [{norm(h) for h in p.get('hot', []) if norm(h)} for p in plans]
+HOT = [{norm(x) for h in p.get('hot', []) for x in str(h).split() if len(norm(x)) > 2} for p in plans]  # expressions → mots
 def word_html(w):
     k = norm(w['t'])
     hot = k and any(k == h or (len(h) > 3 and k.startswith(h)) for h in HOT[w['p']])

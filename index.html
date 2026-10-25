@@ -89,18 +89,31 @@ h1{font-size:22px;margin:0}
 #fxhud{position:absolute;left:0;right:0;bottom:0;padding:12px 16px calc(16px + env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:10px;background:linear-gradient(rgba(0,0,0,0),rgba(0,0,0,.8) 30%)}
 #fxSteps div{padding:2px 0}
 .hudtop{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:14px}
+/* Radar et voix seule */
+.idea .ab{font-size:14px;color:var(--txt);background:#11141a;border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-top:8px;white-space:pre-wrap}
+.idea .ab b{color:var(--warn)}
+.acts{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.acts button{flex:1;padding:9px 10px;font-size:14px}
+#stage.audio{background:#17121C}
+#stage.audio #cam{display:none!important}
+#stage.audio #prompt{height:70%;background:none}
+#stage.audio #flip,#stage.audio #hookChip{display:none!important}
+#stage.audio #play{height:80px;top:auto;bottom:220px}
+.sayplan{margin:0 0 6px;padding:8px 10px;border-left:3px solid #F2A541;background:#11141a;border-radius:8px;font-size:14px}
+.sayplan small{display:block;color:var(--mut);font-size:12px}
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <div class="seg" id="tabs"><button data-t="shoot" class="on">🎬 À tourner</button><button data-t="track">📊 Suivi</button></div>
+    <div class="seg" id="tabs"><button data-t="shoot" class="on">🎬 Tourner</button><button data-t="radar">📡 Radar</button><button data-t="track">📊 Suivi</button></div>
     <div class="seg" id="langSeg">
       <button data-l="all">Tout</button><button data-l="Francais">FR</button><button data-l="عربي">AR</button>
     </div>
   </header>
   <div id="msg"></div>
   <div id="list"></div>
+  <div id="radar" hidden></div>
   <div id="track" hidden></div>
   <div class="queue" id="queue"></div>
 </div>
@@ -205,7 +218,7 @@ function row(p) {
     hook: plain(pr["Texte écran"]?.rich_text),
     link: pr.Link?.url || "",
     cost: pr["Coût ($)"]?.number ?? null,
-    fx: (() => { try { const j = JSON.parse(plain(pr["Scènes"]?.rich_text) || "null"); return j && Array.isArray(j.scenes) && j.scenes.length ? j : null; } catch { return null; } })()
+    fx: (() => { try { const j = JSON.parse(plain(pr["Scènes"]?.rich_text) || "null"); return j && ((Array.isArray(j.scenes) && j.scenes.length) || (j.style === "r7" && Array.isArray(j.plans) && j.plans.length)) ? j : null; } catch { return null; } })()
   };
 }
 async function load() {
@@ -214,6 +227,7 @@ async function load() {
     const res = await api("list");
     S.rows = (Array.isArray(res) ? res : []).map(row).filter(r => VIDEO_TYPES.includes(r.type) && r.script.length > 10);
     S.err = null;
+    setTimeout(resumeRenders, 0);
   } catch (e) { S.err = e.message; }
   S.loading = false; render();
 }
@@ -238,7 +252,7 @@ function render() {
   const rows = S.rows.filter(r => S.lang === "all" || r.lang === S.lang);
   $("#list").innerHTML = S.loading ? `<div class="empty">Chargement des scripts…</div>` :
     !rows.length ? `<div class="empty">Aucun script à tourner. Appuie sur « ＋ Scripts ».</div>` :
-    rows.map(r => `<div class="card">
+    rows.map(r => isR7(r) ? r7Card(r) : `<div class="card">
       ${r.fx ? `<span style="width:24px;flex:none;text-align:center" aria-hidden="true">🎞</span>` : `<input type="checkbox" data-sel="${r.id}" ${S.sel.has(r.id) ? "checked" : ""} aria-label="Ajouter au tournage">`}
       <div class="b"><div class="t" dir="auto" data-edit="${r.id}">${esc(r.name)} <span class="small">✎</span></div>
         <div class="meta"><span class="pill">${isAr(r) ? "AR" : r.lang === "Francais" ? "FR" : esc(r.lang || "?")}</span>
@@ -255,7 +269,9 @@ $("#langSeg").onclick = e => { const l = e.target.dataset.l; if (!l) return; S.l
 $("#list").onclick = e => {
   const c = e.target.closest("[data-sel]"); if (c) { c.checked ? S.sel.add(c.dataset.sel) : S.sel.delete(c.dataset.sel); render(); return; }
   const g = e.target.closest("[data-one]"); if (g) openPlan([g.dataset.one]);
-  const pb = e.target.closest("[data-pub]"); if (pb) { publishFx(S.rows.find(r => r.id === pb.dataset.pub)); return; }
+  const pb = e.target.closest("[data-pub]"); if (pb) { const r = S.rows.find(x => x.id === pb.dataset.pub); isR7(r) ? publishR7(r) : publishFx(r); return; }
+  const vo = e.target.closest("[data-voice]"); if (vo) { openVoice(S.rows.find(r => r.id === vo.dataset.voice)); return; }
+  const rw = e.target.closest("[data-rwait]"); if (rw) { const r = S.rows.find(x => x.id === rw.dataset.rwait); if (r) watchRender(r, true); return; }
   const mk = e.target.closest("[data-make]"); if (mk) makeFaceless(S.rows.find(r => r.id === mk.dataset.make));
   const ed = e.target.closest("[data-edit]"); if (ed) openEdit(S.rows.find(r => r.id === ed.dataset.edit));
 };
@@ -289,9 +305,10 @@ S.tab = "shoot";
 $("#tabs").onclick = e => {
   const t = e.target.closest("[data-t]")?.dataset.t; if (!t) return; S.tab = t;
   document.querySelectorAll("#tabs button").forEach(b => b.classList.toggle("on", b.dataset.t === t));
-  $("#list").hidden = $("#queue").hidden = t !== "shoot"; $("#track").hidden = t !== "track";
+  $("#list").hidden = $("#queue").hidden = t !== "shoot"; $("#track").hidden = t !== "track"; $("#radar").hidden = t !== "radar";
   document.querySelector(".bar").style.display = t === "shoot" ? "" : "none";
   if (t === "track") loadTrack();
+  if (t === "radar") loadRadar();
 };
 async function loadTrack() {
   const el = $("#track"); el.innerHTML = `<div class="empty">Chargement…</div>`;
@@ -371,13 +388,15 @@ function publishDate(r, plan) {
 /* ---------- plateau : caméra + prompteur ---------- */
 const P = { ids: [], i: 0, plan: null, stream: null, rec: null, chunks: [], blob: null, mime: "", y: 0, speed: 40, mult: store.get("mult", 1), font: store.get("font", 30), facing: "user", run: false, raf: 0, t0: 0, lock: null };
 function pickMime() {
-  for (const m of ["video/mp4;codecs=avc1,mp4a.40.2", "video/mp4", "video/webm;codecs=vp9,opus", "video/webm"])
+  for (const m of P.audio ? ["audio/mp4", "audio/webm;codecs=opus", "audio/webm"] : ["video/mp4;codecs=avc1,mp4a.40.2", "video/mp4", "video/webm;codecs=vp9,opus", "video/webm"])
     if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m;
   return "";
 }
-async function startShoot(ids, plan) {
-  if (!window.MediaRecorder || !navigator.mediaDevices?.getUserMedia) { toast("Ce navigateur ne peut pas filmer. Ouvre le Studio dans Safari."); return; }
-  Object.assign(P, { ids, i: 0, plan });
+async function startShoot(ids, plan, audio = false) {
+  if (!window.MediaRecorder || !navigator.mediaDevices?.getUserMedia) { toast("Ce navigateur ne peut pas enregistrer. Ouvre le Studio dans Safari."); return; }
+  Object.assign(P, { ids, i: 0, plan, audio });
+  $("#stage").classList.toggle("audio", audio);
+  $("#rKeep").textContent = audio ? "✓ Garder → montage" : "✓ Garder & publier";
   if (!await openCam()) return;
   $("#stage").classList.add("on");
   try { P.lock = await navigator.wakeLock?.request("screen"); } catch {}
@@ -385,6 +404,10 @@ async function startShoot(ids, plan) {
 }
 async function openCam() {
   P.stream?.getTracks().forEach(t => t.stop());
+  if (P.audio) {  // voix seule : micro sans traitement agressif (le timbre reste naturel)
+    try { P.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: true, autoGainControl: true } }); return true; }
+    catch { toast("Micro refusé : autorise le micro pour ce site dans Réglages › Safari."); return false; }
+  }
   try {
     P.stream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: P.facing, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } },
@@ -446,7 +469,7 @@ function compose() {
   if (C.on) C.raf = requestAnimationFrame(compose);
 }
 function recStream(r) {
-  if (!canComposite()) return P.stream;
+  if (P.audio || !canComposite()) return P.stream;
   if (!C.cv) { C.cv = document.createElement("canvas"); C.cv.width = 1080; C.cv.height = 1920; C.x = C.cv.getContext("2d"); }
   C.hook = (r.hook || "").trim(); C.ar = isAr(r); C.t0 = performance.now(); C.on = true; compose();
   return new MediaStream([...C.cv.captureStream(30).getVideoTracks(), ...P.stream.getAudioTracks()]);
@@ -493,11 +516,11 @@ $("#rec").onclick = async () => {
   P.mime = pickMime(); P.chunks = [];
   const src = recStream(cur());
   if (src === P.stream && cur()?.hook) toast("Ce navigateur ne permet pas l'incrustation : la vidéo part sans texte.");
-  try { P.rec = new MediaRecorder(src, P.mime ? { mimeType: P.mime, videoBitsPerSecond: 6_000_000 } : undefined); }
+  try { P.rec = new MediaRecorder(src, P.mime ? (P.audio ? { mimeType: P.mime, audioBitsPerSecond: 192_000 } : { mimeType: P.mime, videoBitsPerSecond: 6_000_000 }) : undefined); }
   catch { P.rec = new MediaRecorder(src); }
   $("#hookChip").style.display = "none";
   P.mime = P.rec.mimeType || P.mime || "video/mp4";
-  if (/opus|vp8|vp9|webm/i.test(P.mime)) toast("⚠️ Ce navigateur enregistre un son illisible sur iPhone : utilise Safari sur iPhone.", 6000);
+  if (!P.audio && /opus|vp8|vp9|webm/i.test(P.mime)) toast("⚠️ Ce navigateur enregistre un son illisible sur iPhone : utilise Safari sur iPhone.", 6000);
   P.rec.ondataavailable = e => e.data.size && P.chunks.push(e.data);
   P.rec.onstop = () => {
     stopCompose(); P.blob = new Blob(P.chunks, { type: P.mime }); P.rec = null; P.run = false;
@@ -522,6 +545,7 @@ $("#sClose").onclick = () => { if (P.rec) P.rec.stop(); closeShoot(); };
 $("#rRedo").onclick = () => { P.blob = null; showTake(); };
 $("#rKeep").onclick = () => {
   const r = cur(); if (!r || !P.blob) return;
+  if (P.audio) { const blob = P.blob, mime = P.mime; P.blob = null; P.i = P.ids.length; closeShoot(); renderR7(r, { blob, mime }); return; }
   if (P.blob.size > MAX_BYTES) { toast("Vidéo trop lourde (> 150 Mo). Refais une prise plus courte."); return; }
   enqueue(r, P.blob, P.mime, publishDate(r, P.plan));
   S.sel.delete(r.id); P.blob = null; P.i++;
@@ -531,7 +555,7 @@ function closeShoot() {
   if (P.rec) return;
   P.stream?.getTracks().forEach(t => t.stop()); P.stream = null;
   try { P.lock?.release(); } catch {}
-  $("#stage").classList.remove("on"); render();
+  $("#stage").classList.remove("on", "audio"); P.audio = false; render();
 }
 
 /* ---------- file d'envoi : Dropbox puis programmation Notion ---------- */
@@ -644,8 +668,7 @@ $("#bNew").onclick = () => {
     <div class="small">Ils arrivent dans ta liste « à tourner », avec description et hashtags.</div>
     <label>Format</label>
     <div class="seg" id="gMode" style="width:100%"><button data-m="cam" style="flex:1">🎥 Face caméra</button><button data-m="fx" style="flex:1">🎞 Sans visage</button></div>
-    <div id="gStyleBox" hidden><label>Style visuel</label><select id="gStyle">${Object.entries(STYLES).map(([k, v]) => `<option value="${k}">${v.label}</option>`).join("")}</select>
-      <div class="small" style="margin-top:4px">Voix off = ta voix clonée · images IA · étiquette IA cochée automatiquement.</div></div>
+    <div id="gStyleBox" hidden><div class="small" style="margin-top:8px">Style ambre : ta voix (enregistrée avec 🎙, ou ta voix clonée) · personnage du pack · animations · sous-titres incrustés · étiquette IA cochée.</div></div>
     <label>Sujet ou idée</label><textarea id="gTopic" rows="3" dir="auto" placeholder="ex. 3 mythes sur la nicotine">${esc(o.topic)}</textarea>
     <div class="row"><div><label>Langue</label><select id="gLang"><option value="Francais">Français</option><option value="عربي">عربي</option></select></div>
       <div><label>Combien</label><select id="gN">${[1, 2, 3, 4, 5].map(n => `<option>${n}</option>`).join("")}</select></div>
@@ -656,17 +679,24 @@ $("#bNew").onclick = () => {
   </div></div>`;
   $("#gLang").value = o.lang; $("#gN").value = o.n; $("#gSec").value = o.sec; $("#gPromo").checked = o.promo;
   let mode = o.mode || "cam";
-  const setMode = m => { mode = m; document.querySelectorAll("#gMode button").forEach(b => b.classList.toggle("on", b.dataset.m === m)); $("#gStyleBox").hidden = m !== "fx"; $("#gStyle").value = o.style || defStyle($("#gLang").value); };
+  const setMode = m => { mode = m; document.querySelectorAll("#gMode button").forEach(b => b.classList.toggle("on", b.dataset.m === m)); $("#gStyleBox").hidden = m !== "fx"; $("#gSec").disabled = m === "fx"; };
   $("#gMode").onclick = e => { const m = e.target.closest("[data-m]")?.dataset.m; if (m) setMode(m); };
-  $("#gLang").onchange = () => { if (!o.style) $("#gStyle").value = defStyle($("#gLang").value); };
   setMode(mode);
   $("#gCancel").onclick = () => $("#sheet").innerHTML = "";
   $("#gGo").onclick = async () => {
-    const opt = { topic: $("#gTopic").value.trim(), lang: $("#gLang").value, n: +$("#gN").value, sec: +$("#gSec").value, promo: $("#gPromo").checked, mode, style: mode === "fx" ? $("#gStyle").value : o.style };
-    if (mode === "fx") opt.n = Math.min(opt.n, 2);
+    const opt = { topic: $("#gTopic").value.trim(), lang: $("#gLang").value, n: +$("#gN").value, sec: +$("#gSec").value, promo: $("#gPromo").checked, mode };
+    if (mode === "fx") opt.n = Math.min(opt.n, 3);
     if (!opt.topic) { toast("Écris un sujet."); return; }
     store.set("gen", opt);
     const btn = $("#gGo"); btn.disabled = true; btn.textContent = "Claude écrit…";
+    if (mode === "fx") {
+      try {
+        const lang = opt.lang === "عربي" ? "ar" : "fr";
+        await pool(Array.from({ length: opt.n }, (_, k) => k), 3, k => createR7({ topic: opt.n > 1 ? `${opt.topic} (angle n° ${k + 1} sur ${opt.n}, différent des autres)` : opt.topic, lang }));
+        $("#sheet").innerHTML = ""; toast(`${opt.n} vidéo${opt.n > 1 ? "s" : ""} au style ambre : appuie sur 🎙 pour enregistrer ta voix.`, 5000); load();
+      } catch (e) { btn.disabled = false; btn.textContent = "Écrire"; $("#gOut").innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+      return;
+    }
     try {
       const out = await api("gen", { prompt: mode === "fx" ? facelessPrompt(opt) : scriptsPrompt(opt) });
       let arr = parseJSON(out.text); if (!Array.isArray(arr)) arr = arr ? [arr] : [];
@@ -925,6 +955,242 @@ ${o.promo ? "Mentionne naturellement son app « Vague » pour arrêter de fumer.
 Ne donne pas de conseil médical dangereux ; reste factuel et prudent.
 Réponds UNIQUEMENT en JSON : [{"title": "titre YouTube 60 caractères max", "hook": "texte écran 3 à 6 mots", "description": "2-3 phrases + question, sans hashtags", "hashtags": "5 à 8 hashtags", "character": "recurring character description in english", "scenes": [{"text": "voix off", "image": "english literal visual", "motion": "english camera/subject motion"}]}]`;
 }
+
+/* ---------- style ambre (R7) : ta voix + pack d'images + motion design, monté sur GitHub ---------- */
+const REPO = "fehmitlaies-doc/fehmi-studio";
+const REF = /[?&]ref=dev\b/.test(location.search) ? "dev" : "main";   // ?ref=dev pour tester les outils de montage en cours
+const HERO = "https://v3b.fal.media/files/b/0aafd599/XM7NQTAPj9JUnYHjjMfTc_2T9vzp3l.png";   // personnage de référence du pack
+const R7_LOOK = "flat 2D vector illustration on a uniform near-black deep aubergine ink background (#17121C). Same character as the reference: perfectly round head with no face, smooth pill-shaped cream body (#F6EEE3), short rounded arms and legs, no clothes. Single accent: warm amber #F2A541 as soft glowing light; secondary dusty mauve #A89AA6 and plum #3A2E40. Minimal, poetic, centered, square composition. No text, no letters, no neon, no blue.";
+const PACK = {
+  standing: "debout, neutre", sad_sitting: "assis par terre, tête baissée, triste", shadow: "petit, une grande ombre de lui-même derrière",
+  heavy_bag: "porte un énorme sac lourd sur le dos", crack: "fissure ambre lumineuse sur la poitrine", lid_box: "appuie sur le couvercle d'une boîte d'où sort de la lumière (émotions retenues)",
+  battery: "fatigué, batterie presque vide au-dessus de la tête", light_returns: "regarde en haut, la lumière revient sur lui", phone_night: "recroquevillé la nuit, éclairé par son téléphone",
+  bed_awake: "allongé éveillé dans son lit, lune à la fenêtre", two_talk: "deux personnages qui se parlent, étincelle entre eux", back_to_back: "deux personnages côte à côte, bras croisés, distants",
+  walk_light: "marche vers une porte de lumière", thinking: "assis, main au menton, réfléchit", cigarette: "tient une cigarette allumée, fumée",
+  chain: "poignet enchaîné à un poids (dépendance)", mask: "tient un masque souriant devant sa tête", loop: "court dans une roue de hamster (cercle vicieux)",
+  heart_calm: "main sur le cœur, calme, lueur au cœur", crowd: "rangée de personnages gris, lui seul lumineux au milieu", mirror: "devant un miroir, reflet plus sombre",
+  meditate: "assis en tailleur, médite, halo", anxious: "entouré de gribouillis (pensées qui s'emballent)", hug: "deux personnages qui s'enlacent"
+};
+STYLES.r7 = { label: "Ambre (R7)", character: "", prompt: R7_LOOK };
+const isR7 = r => r?.fx?.style === "r7";
+const rx = { get: id => store.get("rx." + id, null), set: (id, v) => store.set("rx." + id, v), del: id => { try { localStorage.removeItem("studio.rx." + id); } catch {} } };
+
+function r7Prompt(o) {
+  return `Tu écris une vidéo courte SANS VISAGE pour le Dr Fehmi (médecin psychiatre : psychologie du quotidien, santé mentale, addictions). Il enregistre lui-même la voix off ; l'image est un motion design au style ambre avec un personnage unique.
+Sujet : ${o.topic}
+${o.version ? `Version retenue (à suivre fidèlement, avec tes propres mots) : ${o.version}` : ""}
+${o.source ? `Source scientifique fournie (la seule que tu peux citer, sans inventer de chiffre) : ${o.source}` : "Aucune étude fournie : n'écris jamais « une étude montre », formule en observation clinique. Aucun chiffre inventé."}
+Langue de la voix off : ${o.lang === "ar" ? "arabe tunisien (darija) naturel et clair, compréhensible dans tout le monde arabe" : "français parlé, tutoiement, phrases courtes"}.
+Durée : 30 à 45 secondes (85 à 115 mots au total).
+${RETENTION}
+Structure obligatoire, 7 à 9 plans de 3 à 6 secondes :
+1) accroche orale de moins de 3 s ; 2-3) reconnaissance et mécanisme caché ; vers 20 s un plan d'appel à l'action d'UN mot à écrire en commentaire ; puis la SOLUTION concrète (un geste, une règle simple) ; avant-dernier plan : si c'est un sujet de santé, invite à en parler à un professionnel ; dernier plan : « Abonne-toi … ».
+Chaque plan :
+- "say" : le texte dit (1 ou 2 phrases).
+- "title" : titre à l'écran, 2 à 6 mots, accordé avec le texte dit (genre et nombre), formulation neutre si possible. Le titre du plan 1 est le titre-accroche (miniature).
+- "img" : UNE pose du pack, choisie pour illustrer littéralement le plan : ${Object.entries(PACK).map(([k, v]) => `${k} (${v})`).join(" ; ")}.
+  Seulement si aucune pose ne convient (2 plans maximum) : ajoute "newimg" = description en anglais de la pose du même personnage (sans texte).
+- "gfx" : animation : "ring" (anneau qui se dessine, idéal plan 1), "pulse" (tension, le personnage tremble), "breath" (cercle de respiration, avec "steps" : 2 ou 3 étiquettes courtes en MAJUSCULES dont le dernier mot est prononcé dans le plan), "cta" (bouton avec "cta" : le mot à écrire), "ecg" (rythme cardiaque qui ralentit), "card" (encadré avec "card": {"b": "phrase courte", "i": "source courte"} — seulement pour la source fournie ou un conseil), "count" (pastilles 1·2·3 avec "count" = nombre d'étapes énoncées dans CE plan, 2 minimum), "none". Varie : au moins 4 plans animés (pas "none").
+- "hot" : 1 à 3 mots exacts du "say" à colorer en ambre.
+Rien de choquant, pas de diagnostic, aucun conseil médical dangereux.
+Réponds UNIQUEMENT en JSON : {"title": "titre YouTube 60 caractères max", "hook": "texte écran 3 à 6 mots", "description": "2-3 phrases + question, sans hashtags", "hashtags": "5 hashtags", "ghost": "UN mot-thème en majuscules", "plans": [{"say": "", "title": "", "img": "", "gfx": "", "hot": []}]}`;
+}
+function cleanPlans(arr) {
+  return (arr || []).filter(p => p && String(p.say || "").trim()).slice(0, 12).map(p => {
+    const o = { say: String(p.say).trim(), title: String(p.title || "").slice(0, 60), img: PACK[p.img] ? p.img : "standing",
+      gfx: ["ring", "pulse", "breath", "cta", "ecg", "card", "count", "none"].includes(p.gfx) ? p.gfx : "none", hot: (p.hot || []).map(String).slice(0, 4) };
+    if (p.newimg) o.newimg = String(p.newimg).slice(0, 300);
+    if (o.gfx === "breath") o.steps = (p.steps || []).map(String).slice(0, 3);
+    if (o.gfx === "cta") o.cta = String(p.cta || "").slice(0, 20);
+    if (o.gfx === "card") o.card = { b: String(p.card?.b || "").slice(0, 60), i: String(p.card?.i || "").slice(0, 80) };
+    if (o.gfx === "count") o.count = Math.max(2, Math.min(5, +p.count || 3));
+    return o;
+  });
+}
+// Claude écrit les plans puis la vidéo arrive dans « À tourner » (procédure habituelle du Studio)
+async function createR7(o) {
+  const out = await api("gen", { prompt: r7Prompt(o) });
+  const j = parseJSON(out.text);
+  const plans = cleanPlans(j?.plans);
+  if (plans.length < 4) throw new Error("plans illisibles, réessaie");
+  const lang = o.lang === "ar" ? "عربي" : "Francais";
+  const res = await api("create", { props: JSON.stringify({
+    Name: { title: [{ text: { content: String(j.title || o.topic).slice(0, 200) } }] },
+    Script: rt(plans.map(p => p.say).join("\n\n")), Description: rt(j.description), Hashtags: rt(j.hashtags), "Texte écran": rt(j.hook || plans[0].title),
+    "Scènes": rt(JSON.stringify({ style: "r7", ghost: String(j.ghost || "").slice(0, 20), plans })), Production: { select: { name: "Visuels IA" } },
+    Type: { select: { name: "Short" } }, Language: { select: { name: lang } }, Channel: { select: { name: lang === "عربي" ? "Dr Fehmi AR" : "Fehmi Tlaies FR" } },
+    "Pipeline Stage": { select: { name: "Script" } }, ...(o.link ? { "Source URL": { url: o.link } } : {})
+  }) });
+  return res.id;
+}
+function r7Card(r) {
+  const job = rx.get(r.id), wait = job && !r.link;
+  return `<div class="card"><span style="width:24px;flex:none;text-align:center" aria-hidden="true">🎙</span>
+    <div class="b"><div class="t" dir="auto" data-edit="${r.id}">${esc(r.name)} <span class="small">✎</span></div>
+      <div class="meta"><span class="pill">${isAr(r) ? "AR" : "FR"}</span><span class="pill">${r.fx.plans.length} plans</span><span class="pill">ambre</span>
+      ${wait ? `<span class="pill warn">⏳ montage en cours</span>` : r.link ? `<span class="pill ok">vidéo prête</span>` : `<span class="pill warn">voix à enregistrer</span>`}${r.cost != null ? `<span class="pill">💲 ${money(r.cost)}</span>` : ""}</div></div>
+    ${wait ? `<button class="go" data-rwait="${r.id}" aria-label="Voir l'avancement du montage">⏳</button>` : `<button class="go" data-voice="${r.id}" aria-label="${r.link ? "Refaire" : "Enregistrer"} la voix">🎙</button>`}</div>
+    ${r.link ? `<div class="vbox" data-v="${esc(r.link)}" style="margin:-4px 0 12px"><div class="row"><button class="ghost vplay">▶ Regarder</button><button class="pri" data-pub="${r.id}">🚀 Publier</button></div></div>` : ""}`;
+}
+
+/* ---------- onglet Radar : idées détectées → versions A/B → script ---------- */
+async function loadRadar() {
+  const el = $("#radar"); el.innerHTML = `<div class="empty">Chargement du radar…</div>`;
+  try {
+    const res = await api("rlist").catch(e => ({ status: 403, error: e.message }));
+    if (res.status === 403) {
+      el.innerHTML = `<div class="err">Le Studio n'a pas encore accès au Radar. Dans Notion, ouvre la page « Radar Viral » › ••• › Connexions › ajoute <b>Make</b>. Puis reviens ici.</div>`; return;
+    }
+    const ideas = (res.results || []).map(p => {
+      const pr = p.properties || {};
+      return { id: p.id.replace(/-/g, ""), n: pr["N°"]?.number, hook: plain(pr["Hook adapté"]?.title), lang: pr.Langue?.select?.name || "fr",
+        a: plain(pr["Version A"]?.rich_text), b: plain(pr["Version B"]?.rich_text), src: plain(pr["Source scientifique"]?.rich_text),
+        views: pr.Vues?.number, out: pr["Score outlier"]?.number, sens: !!pr["⚠️ Sensible"]?.checkbox, link: pr.Lien?.url || "", acc: plain(pr.Compte?.rich_text) };
+    }).filter(i => S.lang === "all" || (i.lang === "ar") === (S.lang === "عربي"));
+    S.ideas = ideas;
+    const k = v => v == null ? "" : v >= 1e6 ? (v / 1e6).toFixed(1).replace(".0", "") + " M" : v >= 1e3 ? Math.round(v / 1e3) + " k" : v;
+    el.innerHTML = !ideas.length ? `<div class="empty">Aucune idée en attente. Le radar tourne le lundi et le jeudi.</div>` : ideas.map(i => `<div class="card idea"><div class="b">
+        <div class="t" dir="auto">${i.n ? i.n + ". " : ""}${esc(i.hook)}</div>
+        <div class="meta"><span class="pill">${i.lang.toUpperCase()}</span>${i.views ? `<span class="pill">👁 ${k(i.views)}</span>` : ""}${i.out ? `<span class="pill">×${Math.round(i.out)} vs moyenne</span>` : ""}${i.sens ? `<span class="pill warn">⚠️ sensible</span>` : ""}${i.link ? `<a class="pill" href="${esc(i.link)}" target="_blank" rel="noopener" style="color:inherit">source ${esc(i.acc)}</a>` : ""}</div>
+        <div class="ab" dir="auto"><b>A</b> ${esc(i.a)}</div><div class="ab" dir="auto"><b>B</b> ${esc(i.b)}</div>
+        <div class="acts"><button class="pri" data-take="${i.id}" data-v="A">Prendre A</button><button class="pri" data-take="${i.id}" data-v="B">Prendre B</button><button class="ghost" data-rej="${i.id}" aria-label="Rejeter cette idée">✕</button></div>
+      </div></div>`).join("");
+  } catch (e) { el.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+}
+$("#radar").onclick = async e => {
+  const rj = e.target.closest("[data-rej]");
+  if (rj) { rj.disabled = true; await api("update", { id: rj.dataset.rej, props: JSON.stringify({ Statut: { select: { name: "Rejeté" } } }) }).catch(er => toast(er.message)); loadRadar(); return; }
+  const b = e.target.closest("[data-take]"); if (!b) return;
+  const i = S.ideas.find(x => x.id === b.dataset.take), v = b.dataset.v; if (!i) return;
+  if (i.sens && !confirm("Sujet sensible (santé). Tu confirmes la création de cette vidéo ?")) return;
+  document.querySelectorAll("#radar [data-take]").forEach(x => x.disabled = true); b.textContent = "Claude écrit…";
+  try {
+    await createR7({ topic: i.hook, version: v === "A" ? i.a : i.b, source: i.src && !/compléter|vérifier|observation/i.test(i.src) ? i.src : "", lang: i.lang, link: i.link });
+    await api("update", { id: i.id, props: JSON.stringify({ Statut: { select: { name: "Envoyé au studio" } }, "Version choisie": { select: { name: v } }, Niveau: { select: { name: "Fiche" } } }) }).catch(() => {});
+    toast("Script prêt dans « À tourner » : appuie sur 🎙 pour enregistrer ta voix.", 5000);
+    load(); loadRadar();
+  } catch (er) { toast(er.message); loadRadar(); }
+};
+
+/* ---------- voix : la tienne (prompteur voix seule) ou la voix clonée ---------- */
+function openVoice(r) {
+  if (!r) return;
+  const chars = r.fx.plans.reduce((a, p) => a + p.say.length, 0);
+  $("#sheet").innerHTML = `<div class="sheet"><div>
+    <h2 style="margin:0 0 4px" dir="auto">${esc(r.name)}</h2>
+    <div class="small">Pièce calme, téléphone à 20 cm, mode avion. Une prise d'une traite : si tu rates une phrase, fais une pause et recommence-la, la dernière est gardée.</div>
+    <div style="margin:12px 0" dir="auto">${r.fx.plans.map((p, k) => `<div class="sayplan"><small>Plan ${k + 1} · ${esc(p.title)}</small>${esc(p.say)}</div>`).join("")}</div>
+    <div class="row"><button class="ghost" id="vClone">🤖 Voix clonée (≈ ${money(chars * PRICE.tts)})</button><button class="pri" id="vRec">🎙 Ma voix</button></div>
+    <button class="ghost" id="vClose" style="width:100%;margin-top:10px">Fermer</button>
+  </div></div>`;
+  $("#vClose").onclick = () => $("#sheet").innerHTML = "";
+  $("#vRec").onclick = () => { $("#sheet").innerHTML = ""; startShoot([r.id], store.get("plan", { mode: "now", time: "18:00" }), true); };
+  $("#vClone").onclick = async () => {
+    const b = $("#vClone"); b.disabled = true; b.textContent = "Voix clonée…";
+    try {
+      const text = r.fx.plans.map(p => p.say).join(" <#0.45#> ");
+      const d = await falRun("fal-ai/minimax/speech-02-hd", { text, voice_setting: { voice_id: VOICE_ID, speed: 1, vol: 1, pitch: 0, emotion: "neutral" }, language_boost: isAr(r) ? "Arabic" : "French", output_format: "url" });
+      if (!d.audio?.url) throw new Error("voix non générée");
+      $("#sheet").innerHTML = ""; renderR7(r, { url: d.audio.url, cost: text.length * PRICE.tts });
+    } catch (e) { b.disabled = false; b.textContent = "🤖 Voix clonée"; toast(e.message); }
+  };
+}
+async function falUpload(blob, fname) {
+  const ctype = (blob.type || "application/octet-stream").split(";")[0];
+  const up = await api("falup", { ctype, fname });
+  if (up.status !== 200) throw new Error("envoi refusé par fal");
+  const res = await fetch(up.data.upload_url, { method: "PUT", headers: { "Content-Type": ctype }, body: blob });
+  if (!res.ok) throw new Error("envoi : " + res.status);
+  return up.data.file_url;
+}
+const b64 = s => btoa(unescape(encodeURIComponent(s)));
+// Envoie la voix + les plans au montage GitHub, puis suit l'avancement
+async function renderR7(r, src) {
+  $("#fx").classList.add("on"); $("#fxv").style.display = "none"; $("#fxc").style.display = "none";
+  $("#fxTitle").textContent = r.name; fxButtons(`<button class="ghost" id="fxClose">Fermer</button>`, { fxClose: closeFx });
+  const steps = [["Voix", "run"], ["Images", "wait"], ["Montage (≈ 5 min, tu peux fermer le Studio)", "wait"]];
+  const set = (i, st, label) => { steps[i][1] = st; if (label) steps[i][0] = label; fxSteps(steps); };
+  fxSteps(steps);
+  try {
+    let cost = src.cost || 0;
+    const voice = src.url || await falUpload(src.blob, "voix." + (/mp4|m4a|aac/.test(src.mime || src.blob.type) ? "m4a" : "webm"));
+    set(0, "ok", src.url ? "Voix clonée" : "Ta voix"); set(1, "run");
+    const plans = r.fx.plans;
+    let changed = false;
+    for (const p of plans.filter(p => p.newimg && !p.img_url)) {
+      const d = await falRun("fal-ai/nano-banana/edit", { prompt: `Use exactly the same character as the reference image. New square illustration. Pose and scene: ${p.newimg}. ${R7_LOOK}`, image_urls: [HERO], num_images: 1, aspect_ratio: "1:1" });
+      p.img_url = d.images?.[0]?.url; cost += PRICE.img; changed = true;
+    }
+    if (changed) api("update", { id: r.id, props: JSON.stringify({ "Scènes": rt(JSON.stringify(r.fx)) }) }).catch(() => {});
+    set(1, "ok", changed ? "Images (nouvelles poses créées)" : "Images du pack"); set(2, "run");
+    const t = String(Math.floor(Date.now() / 1000));
+    const job = { lang: isAr(r) ? "ar" : "fr", ghost: r.fx.ghost || "", voice, plans: plans.map(({ newimg, ...p }) => p) };
+    const res = await api("render", { id: r.id, t, ref: REF, job: b64(JSON.stringify(job)) });
+    if (!res.ok) throw new Error("le montage n'a pas démarré (" + (res.status || "?") + ")");
+    rx.set(r.id, { file: `${r.id}-${t}.mp4`, name: `${r.id}-${t}`, cost: +cost.toFixed(2), at: Date.now() });
+    render(); watchRender(r, true);
+  } catch (e) {
+    const i = steps.findIndex(x => x[1] === "run"); if (i >= 0) steps[i][1] = "err"; fxSteps(steps);
+    fxButtons(`<button class="ghost" id="fxClose2">Fermer</button><button class="pri" id="fxRetry">Réessayer</button>`, { fxClose2: closeFx, fxRetry: () => renderR7(r, src) });
+    toast(e.message);
+  }
+}
+// Suivi du montage : l'API publique GitHub dit si le rendu est fini (sans clé)
+const watching = new Set();
+async function watchRender(r, show) {
+  const job = rx.get(r.id); if (!job) return;
+  if (show) {
+    $("#fx").classList.add("on"); $("#fxv").style.display = "none"; $("#fxc").style.display = "none"; $("#fxTitle").textContent = r.name;
+    fxButtons(`<button class="ghost" id="fxClose">Fermer (le montage continue)</button>`, { fxClose: closeFx });
+  }
+  if (watching.has(r.id)) return; watching.add(r.id);
+  const step = msg => { if ($("#fx").classList.contains("on") && $("#fxTitle").textContent === r.name) fxSteps([["Voix", "ok"], ["Images", "ok"], [msg, "run"]]); };
+  try {
+    for (let k = 0; k < 90; k++) {
+      const min = Math.max(0, Math.round((Date.now() - job.at) / 60000));
+      let run;
+      try {
+        const g = await (await fetch(`https://api.github.com/repos/${REPO}/actions/runs?event=workflow_dispatch&per_page=30`)).json();
+        run = (g.workflow_runs || []).find(x => x.display_title === "radar " + job.name);
+      } catch {}
+      step(run ? (run.status === "completed" ? "Vidéo terminée, récupération…" : `Montage en cours… ${min} min`) : `Montage en attente… ${min} min`);
+      if (run?.status === "completed") {
+        if (run.conclusion !== "success") throw new Error("le montage a échoué sur GitHub");
+        const l = await api("rlink", { file: job.file });
+        if (l.status !== 200 || !l.url) throw new Error("vidéo introuvable dans Dropbox");
+        r.link = l.url; r.cost = job.cost;
+        await api("update", { id: r.id, props: JSON.stringify({ Link: { url: l.url }, "Coût ($)": { number: job.cost } }) }).catch(() => {});
+        job.done = true; rx.set(r.id, job); render();
+        if ($("#fx").classList.contains("on") && $("#fxTitle").textContent === r.name) {
+          fxSteps([["Voix", "ok"], ["Images", "ok"], [`Montage — coût ${money(job.cost)}`, "ok"]]);
+          const v = $("#fxv"); v.src = l.url.replace("www.dropbox.com", "dl.dropboxusercontent.com"); v.style.display = "block";
+          fxButtons(`<button class="ghost" id="fxRedo">↺ Refaire la voix</button><button class="pri" id="fxKeep">✓ Publier</button>`, {
+            fxRedo: () => { closeFx(); openVoice(r); }, fxKeep: async () => { closeFx(); await publishR7(r); } });
+        } else toast("Vidéo prête : " + r.name, 5000);
+        return;
+      }
+      if (Date.now() - job.at > 40 * 60000) throw new Error("montage trop long : réessaie");
+      await new Promise(ok => setTimeout(ok, Date.now() - job.at < 150000 ? 150000 - (Date.now() - job.at) : 30000));
+    }
+  } catch (e) {
+    rx.del(r.id); render(); toast(e.message, 6000);
+    if ($("#fx").classList.contains("on") && $("#fxTitle").textContent === r.name)
+      fxButtons(`<button class="ghost" id="fxClose2">Fermer</button><button class="pri" id="fxRetry">Refaire la voix</button>`, { fxClose2: closeFx, fxRetry: () => { closeFx(); openVoice(r); } });
+  } finally { watching.delete(r.id); }
+}
+// Publication : la vidéo est déjà dans Dropbox, on la programme directement (sous-titres déjà incrustés, étiquette IA cochée)
+async function publishR7(r) {
+  const job = rx.get(r.id);
+  if (!job?.file) return publishFx(r);
+  try {
+    await api("done", { id: r.id, file: job.file, date: publishDate(r, store.get("plan", { mode: "now", time: "18:00" })), prod: "ia", sub: "", lang: isAr(r) ? "ar" : "fr" });
+    rx.del(r.id); S.rows = S.rows.filter(x => x.id !== r.id); render();
+    toast("Programmée : part sur TikTok + YouTube à l'heure prévue.", 4000);
+  } catch (e) { toast(e.message); }
+}
+// Montages lancés avant une fermeture du Studio : on reprend le suivi en arrière-plan
+function resumeRenders() { for (const r of S.rows) if (isR7(r) && !r.link && rx.get(r.id)) watchRender(r, false); }
+
 
 render();
 if (KEY) { load(); resumeQueue(); } else { S.loading = false; render(); }
