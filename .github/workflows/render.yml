@@ -1,0 +1,54 @@
+# Montage des vidéos Radar (style R7) : lancé par le Studio via Make, rend la vidéo et la dépose dans Dropbox.
+name: render
+run-name: radar ${{ inputs.name }}
+on:
+  workflow_dispatch:
+    inputs:
+      name:
+        description: identifiant <page>-<horodatage>
+        required: true
+        type: string
+      job:
+        description: plans + voix (JSON en base64)
+        required: true
+        type: string
+      upload:
+        description: lien d'envoi Dropbox temporaire
+        required: false
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: render-${{ inputs.name }}
+  cancel-in-progress: false
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: ffmpeg
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null
+      - name: Cache HyperFrames (Chrome + modèle de transcription)
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/hyperframes
+          key: hyperframes-0.8.199-v1
+      - name: Navigateur de rendu
+        run: npx -y hyperframes@0.8.199 browser ensure
+      - name: Montage
+        env:
+          JOB: ${{ inputs.job }}
+          UPLOAD: ${{ inputs.upload }}
+        run: bash radar/tools/render.sh
+      - name: Vidéo (copie de secours, 3 jours)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: video
+          path: out.mp4
+          retention-days: 3
+          if-no-files-found: ignore
