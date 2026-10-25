@@ -26,8 +26,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
       - name: ffmpeg
@@ -39,16 +39,7 @@ jobs:
           key: hyperframes-0.8.199-v1
       - name: Navigateur de rendu
         run: npx -y hyperframes@0.8.199 browser ensure
+      # Le dépôt est public : les entrées (voix, lien d'envoi) sont lues dans l'événement, jamais
+      # passées en variables d'environnement (affichées dans les journaux), et la vidéo n'est pas archivée ici.
       - name: Montage
-        env:
-          JOB: ${{ inputs.job }}
-          UPLOAD: ${{ inputs.upload }}
         run: bash radar/tools/render.sh
-      - name: Vidéo (copie de secours, 3 jours)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: video
-          path: out.mp4
-          retention-days: 3
-          if-no-files-found: ignore

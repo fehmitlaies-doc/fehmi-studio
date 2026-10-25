@@ -1,0 +1,10 @@
+[
+ {"say":"Ce geste de dix secondes calme une montée de colère.","title":"10 secondes contre la colère","img":"anxious","gfx":"hook"},
+ {"say":"Tu sens ta mâchoire qui se serre, ton cœur qui accélère ? Avant de répondre, fais ça.","title":"Avant de répondre…","img":"anxious","gfx":"pulse"},
+ {"say":"Inspire par le nez. Puis, sans souffler, une deuxième petite inspiration. Et expire lentement, longtemps, par la bouche.","title":"2 inspirations · 1 longue expiration","img":"heart_calm","gfx":"breath"},
+ {"say":"Écris calme en commentaire si tu vas l'essayer.","title":"Écris « CALME »","img":"two_talk","gfx":"cta"},
+ {"say":"Pourquoi ça marche ? L'expiration longue active le frein naturel de ton cœur.","title":"Le frein du cœur","img":"heart_calm","gfx":"ecg"},
+ {"say":"Une équipe de Stanford l'a comparé à la méditation : cinq minutes par jour amélioraient davantage l'humeur.","title":"Stanford · 2023","img":"meditate","gfx":"study"},
+ {"say":"Alors refais-le trois fois, dès que ça monte. Et si la colère revient souvent, parles-en à un professionnel.","title":"3 fois, dès que ça monte","img":"light_returns","gfx":"x3"},
+ {"say":"Abonne-toi pour d'autres gestes simples qui protègent ta tête.","title":"Dr Fehmi · Psychologie","img":"walk_light","gfx":"end"}
+]
