@@ -993,7 +993,8 @@ Chaque plan :
 - "gfx" : animation : "ring" (anneau qui se dessine, idéal plan 1), "pulse" (tension, le personnage tremble), "breath" (cercle de respiration, avec "steps" : 2 ou 3 étiquettes courtes en MAJUSCULES dont le dernier mot est prononcé dans le plan), "cta" (bouton avec "cta" : le mot à écrire), "ecg" (rythme cardiaque qui ralentit), "card" (encadré avec "card": {"b": "phrase courte", "i": "source courte"} — seulement pour la source fournie ou un conseil), "count" (pastilles 1·2·3 avec "count" = nombre d'étapes énoncées dans CE plan, 2 minimum), "none". Varie : au moins 4 plans animés (pas "none").
 - "hot" : 1 à 3 mots exacts du "say" à colorer en ambre.
 Rien de choquant, pas de diagnostic, aucun conseil médical dangereux.
-Réponds UNIQUEMENT en JSON : {"title": "titre YouTube 60 caractères max", "hook": "texte écran 3 à 6 mots", "description": "2-3 phrases + question, sans hashtags", "hashtags": "5 hashtags", "ghost": "UN mot-thème en majuscules", "plans": [{"say": "", "title": "", "img": "", "gfx": "", "hot": []}]}`;
+Musique de fond : "calme" (sujet grave, introspectif) ou "espoir" (solution, motivation).
+Réponds UNIQUEMENT en JSON : {"title": "titre YouTube 60 caractères max", "hook": "texte écran 3 à 6 mots", "description": "2-3 phrases + question, sans hashtags", "hashtags": "5 hashtags", "ghost": "UN mot-thème en majuscules", "music": "calme", "plans": [{"say": "", "title": "", "img": "", "gfx": "", "hot": []}]}`;
 }
 function cleanPlans(arr) {
   return (arr || []).filter(p => p && String(p.say || "").trim()).slice(0, 12).map(p => {
@@ -1017,7 +1018,7 @@ async function createR7(o) {
   const res = await api("create", { props: JSON.stringify({
     Name: { title: [{ text: { content: String(j.title || o.topic).slice(0, 200) } }] },
     Script: rt(plans.map(p => p.say).join("\n\n")), Description: rt(j.description), Hashtags: rt(j.hashtags), "Texte écran": rt(j.hook || plans[0].title),
-    "Scènes": rt(JSON.stringify({ style: "r7", ghost: String(j.ghost || "").slice(0, 20), plans })), Production: { select: { name: "Visuels IA" } },
+    "Scènes": rt(JSON.stringify({ style: "r7", ghost: String(j.ghost || "").slice(0, 20), music: j.music === "espoir" ? "espoir" : "calme", plans })), Production: { select: { name: "Visuels IA" } },
     Type: { select: { name: "Short" } }, Language: { select: { name: lang } }, Channel: { select: { name: lang === "عربي" ? "Dr Fehmi AR" : "Fehmi Tlaies FR" } },
     "Pipeline Stage": { select: { name: "Script" } }, ...(o.link ? { "Source URL": { url: o.link } } : {})
   }) });
@@ -1124,9 +1125,11 @@ async function renderR7(r, src) {
     if (changed) api("update", { id: r.id, props: JSON.stringify({ "Scènes": rt(JSON.stringify(r.fx)) }) }).catch(() => {});
     set(1, "ok", changed ? "Images (nouvelles poses créées)" : "Images du pack"); set(2, "run");
     const t = String(Math.floor(Date.now() / 1000));
-    const job = { lang: isAr(r) ? "ar" : "fr", ghost: r.fx.ghost || "", voice, plans: plans.map(({ newimg, ...p }) => p) };
-    const res = await api("render", { id: r.id, t, ref: REF, job: b64(JSON.stringify(job)) });
-    if (!res.ok) throw new Error("le montage n'a pas démarré (" + (res.status || "?") + ")");
+    const job = { lang: isAr(r) ? "ar" : "fr", ghost: r.fx.ghost || "", music: r.fx.music || "calme", voice, plans: plans.map(({ newimg, ...p }) => p) };
+    let res;
+    try { res = await api("render", { id: r.id, t, ref: REF, job: b64(JSON.stringify(job)) }); }
+    catch (e) { throw new Error(/refusé la demande/.test(e.message) ? "Montage pas encore activé : la clé GitHub n'est pas dans Make (voir la liste d'étapes)." : e.message); }
+    if (!res.ok) throw new Error("GitHub a refusé le montage (" + (res.status || "?") + ") : vérifie la clé « GitHub Studio » dans Make.");
     rx.set(r.id, { file: `${r.id}-${t}.mp4`, name: `${r.id}-${t}`, cost: +cost.toFixed(2), at: Date.now() });
     render(); watchRender(r, true);
   } catch (e) {
@@ -1180,8 +1183,9 @@ async function watchRender(r, show) {
 }
 // Publication : la vidéo est déjà dans Dropbox, on la programme directement (sous-titres déjà incrustés, étiquette IA cochée)
 async function publishR7(r) {
-  const job = rx.get(r.id);
-  if (!job?.file) return publishFx(r);
+  // fichier Dropbox : mémorisé sur ce téléphone, sinon retrouvé dans le lien (autre appareil)
+  const job = rx.get(r.id) || { file: (decodeURIComponent(r.link || "").match(/\/([0-9a-f]{32}-\d+\.mp4)(\?|$)/) || [])[1] };
+  if (!job?.file) { toast("Vidéo introuvable : refais la voix avec 🎙."); return; }
   try {
     await api("done", { id: r.id, file: job.file, date: publishDate(r, store.get("plan", { mode: "now", time: "18:00" })), prod: "ia", sub: "", lang: isAr(r) ? "ar" : "fr" });
     rx.del(r.id); S.rows = S.rows.filter(x => x.id !== r.id); render();

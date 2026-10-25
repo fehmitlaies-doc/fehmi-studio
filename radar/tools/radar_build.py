@@ -10,7 +10,10 @@ D = sys.argv[1]
 W, HT = 1080, 1920
 job = json.load(open(f'{D}/job.json'))
 plans, AR = job['plans'], job.get('lang') == 'ar'
-asr = [w for w in json.load(open(f'{D}/assets/transcript.json')) if str(w.get('text', '')).strip()]
+try:
+    asr = [w for w in json.load(open(f'{D}/assets/transcript.json')) if str(w.get('text', '')).strip()]
+except Exception:
+    asr = []  # transcription absente : minutage réparti sur la durée
 probe = lambda f: float(subprocess.check_output(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', f]).decode())
 src_dur = probe(f'{D}/assets/voice.m4a')
 
@@ -61,15 +64,20 @@ for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, A, B, autojunk=False).g
         for k in range(i2 - i1):
             words[i1 + k]['s'], words[i1 + k]['e'] = asr[j1 + k]['start'], asr[j1 + k]['end']
     elif tag == 'replace':
-        extra = (j2 - j1) - (i2 - i1)
-        if extra >= 2:  # début raté puis phrase reprise : on garde la fin
-            cuts.append((asr[j1]['start'], asr[j1 + extra]['start'])); j1 += extra
         if i2 > i1 and j2 > j1:
             s0, e0, n = asr[j1]['start'], asr[j2 - 1]['end'], i2 - i1
             for k in range(n):
                 words[i1 + k]['s'], words[i1 + k]['e'] = s0 + (e0 - s0) * k / n, s0 + (e0 - s0) * (k + 1) / n
-    elif tag == 'insert' and j2 - j1 >= 2:
-        cuts.append((asr[j1]['start'], asr[j2]['start'] if j2 < len(asr) else asr[j2 - 1]['end']))
+    elif tag == 'insert' and j2 - j1 >= 2 and j2 < len(asr):
+        # mots en trop coupés seulement s'ils reprennent la suite du texte (début de phrase raté) ;
+        # une phrase ajoutée librement reste dans la vidéo
+        nxt = set(A[i1:i1 + 8])
+        if sum(b in nxt for b in B[j1:j2]) >= max(2, (j2 - j1) // 2) and asr[j2]['start'] - asr[j1]['start'] < 8:
+            cuts.append((asr[j1]['start'], asr[j2]['start']))
+if not any('s' in w for w in words):  # rien de reconnu : répartition proportionnelle
+    n = len(words); span = max(1.0, src_dur - 0.6)
+    for k, w in enumerate(words):
+        w['s'], w['e'] = 0.3 + span * k / n, 0.3 + span * (k + 1) / n
 for i, w in enumerate(words):  # mots non reconnus : entre leurs voisins
     if 's' not in w:
         prev = next((words[j]['e'] for j in range(i - 1, -1, -1) if 'e' in words[j]), 0.1)
@@ -92,7 +100,8 @@ keep, t = [], 0.0
 for a, b in merged:
     if a > t: keep.append((t, a))
     t = max(t, b)
-keep.append((t, tail))
+if tail > t + 0.05: keep.append((t, tail))
+if not keep: keep = [(0, src_dur)]
 shift = lambda x: sum(min(b, x) - a for a, b in keep if a < x)
 for w in words:
     w['s'], w['e'] = round(shift(w['s']), 3), round(shift(w['e']), 3)
@@ -101,8 +110,22 @@ fc += ''.join(f'[k{i}]' for i in range(len(keep))) + f'concat=n={len(keep)}:v=0:
 subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', f'{D}/assets/voice.m4a', '-filter_complex', fc, '-map', '[out]', '-c:a', 'aac', '-b:a', '192k', f'{D}/assets/voice_final.m4a'], check=True)
 dur = probe(f'{D}/assets/voice_final.m4a')
 
-starts = [0] + [max(0, next(w for w in words if w['p'] == pi)['s'] - 0.2) for pi in range(1, len(plans))]
+# musique libre de droits (générée pour le Studio) à −20 dB sous la voix, fondu d'entrée et de sortie
 END = dur + 1.6
+music = job.get('music') or 'calme'
+audio_src, audio_dur = 'voice_final.m4a', dur
+try:
+    if music != 'none':
+        mf = f'{D}/assets/music_{music}.m4a'
+        open(mf).close()
+        subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', f'{D}/assets/voice_final.m4a', '-stream_loop', '-1', '-i', mf, '-filter_complex',
+                        f'[1:a]volume=-20dB,atrim=0:{END:.2f},afade=t=in:d=1.5,afade=t=out:st={END - 2:.2f}:d=2[m];[0:a]apad=whole_dur={END:.2f}[v];[v][m]amix=inputs=2:duration=first:normalize=0[out]',
+                        '-map', '[out]', '-c:a', 'aac', '-b:a', '192k', f'{D}/assets/mix.m4a'], check=True)
+        audio_src, audio_dur = 'mix.m4a', END
+except (OSError, subprocess.CalledProcessError):
+    pass
+
+starts = [0] + [max(0, next(w for w in words if w['p'] == pi)['s'] - 0.2) for pi in range(1, len(plans))]
 ends = starts[1:] + [END]
 
 # 4. sous-titres de 3 mots, jamais à cheval sur deux plans
@@ -146,7 +169,7 @@ body{{margin:0;width:{W}px;height:{HT}px;overflow:hidden;background:#17121C}}
 ghost = H.escape((' · '.join([job.get('ghost') or 'RESPIRE'] * 3)))
 h = [f'<!DOCTYPE html><html lang="{"ar" if AR else "fr"}"><head><meta charset="UTF-8"><script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script><style>{css}</style></head><body>',
      f'<div id="root" data-composition-id="main" data-width="{W}" data-height="{HT}" data-start="0" data-duration="{END:.2f}">',
-     f'<audio id="voice" data-start="0" data-duration="{dur:.2f}" data-track-index="1" src="assets/voice_final.m4a"></audio>',
+     f'<audio id="voice" data-start="0" data-duration="{audio_dur:.2f}" data-track-index="1" src="assets/{audio_src}"></audio>',
      f'<div class="ghost" id="ghost" data-layout-ignore>{ghost}</div><div class="halo" id="halo" data-layout-ignore></div>',
      f'<div class="sig" id="sig">{"د. فهمي · علم النفس" if AR else "Dr Fehmi · Psychologie"}</div>']
 js = ['window.__timelines=window.__timelines||{};var tl=gsap.timeline({paused:true});',
