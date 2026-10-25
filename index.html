@@ -204,6 +204,7 @@ function row(p) {
     promo: !!pr["Promo app"]?.checkbox,
     hook: plain(pr["Texte écran"]?.rich_text),
     link: pr.Link?.url || "",
+    cost: pr["Coût ($)"]?.number ?? null,
     fx: (() => { try { const j = JSON.parse(plain(pr["Scènes"]?.rich_text) || "null"); return j && Array.isArray(j.scenes) && j.scenes.length ? j : null; } catch { return null; } })()
   };
 }
@@ -243,7 +244,7 @@ function render() {
         <div class="meta"><span class="pill">${isAr(r) ? "AR" : r.lang === "Francais" ? "FR" : esc(r.lang || "?")}</span>
         <span class="pill">~${secs(r)} s</span>
         ${r.desc && r.tags ? `<span class="pill ok">texte prêt</span>` : `<span class="pill warn">texte auto</span>`}
-        ${r.fx && r.link ? `<span class="pill ok">vidéo prête</span>` : ""}${r.promo ? `<span class="pill">promo app</span>` : ""}${r.fx ? `<span class="pill">sans visage · ${esc(STYLES[r.fx.style]?.label || "")}</span>` : ""}</div></div>
+        ${r.fx && r.link ? `<span class="pill ok">vidéo prête</span>` : ""}${r.cost != null ? `<span class="pill">💲 ${money(r.cost)}</span>` : ""}${r.promo ? `<span class="pill">promo app</span>` : ""}${r.fx ? `<span class="pill">sans visage · ${esc(STYLES[r.fx.style]?.label || "")}</span>` : ""}</div></div>
       ${r.fx ? `<button class="go" data-make="${r.id}" aria-label="${r.link ? "Refaire" : "Produire"} la vidéo sans visage">🎞</button>` : `<button class="go" data-one="${r.id}" aria-label="Tourner ce script">▶</button>`}</div>
       ${r.fx && r.link ? `<div class="vbox" data-v="${esc(r.link)}" style="margin:-4px 0 12px"><div class="row"><button class="ghost vplay">▶ Regarder</button><button class="pri" data-pub="${r.id}">🚀 Publier</button></div></div>` : ""}`).join("");
   const n = S.sel.size;
@@ -299,14 +300,14 @@ async function loadTrack() {
     const items = (Array.isArray(res) ? res : []).map(p => {
       const pr = p.properties || {};
       return { name: plain(pr.Name?.title) || "Sans titre", lang: pr.Language?.select?.name || "", st: pr["Statut publication"]?.select?.name || "",
-        stage: pr["Pipeline Stage"]?.select?.name || "", prod: pr.Production?.select?.name || "", date: pr["Publish Date"]?.date?.start || "",
+        stage: pr["Pipeline Stage"]?.select?.name || "", prod: pr.Production?.select?.name || "", cost: pr["Coût ($)"]?.number ?? null, date: pr["Publish Date"]?.date?.start || "",
         links: (plain(pr["Liens publiés"]?.rich_text) + " " + (pr["Published URL"]?.url || "")).match(/https?:\/\/\S+/g) || [], video: (pr.Link?.url || "").replace("www.dropbox.com", "dl.dropboxusercontent.com") };
     }).filter(i => S.lang === "all" || i.lang === S.lang);
     el.innerHTML = !items.length ? `<div class="empty">Rien de programmé pour l'instant.</div>` : items.map(i => {
       const cls = i.st === "Publié" ? "ok" : i.st === "Erreur" ? "warn" : "";
       const d = i.date ? new Date(i.date).toLocaleString("fr-FR", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
       return `<div class="card"><div class="b"><div class="t" dir="auto">${esc(i.name)}</div>
-        <div class="meta"><span class="pill">${i.lang === "عربي" ? "AR" : "FR"}</span><span class="pill ${cls}">${esc(i.st || i.stage)}</span>${i.prod ? `<span class="pill">${esc(i.prod)}</span>` : ""}${d ? `<span class="pill">${esc(d)}</span>` : ""}</div>
+        <div class="meta"><span class="pill">${i.lang === "عربي" ? "AR" : "FR"}</span><span class="pill ${cls}">${esc(i.st || i.stage)}</span>${i.prod ? `<span class="pill">${esc(i.prod)}</span>` : ""}${d ? `<span class="pill">${esc(d)}</span>` : ""}${i.cost != null ? `<span class="pill">💲 ${money(i.cost)}</span>` : ""}</div>
         ${i.video ? `<div class="vbox" data-v="${esc(i.video)}"><button class="ghost vplay">▶ Regarder${i.st === "Sous-titrage" ? " (sous-titres en cours…)" : ""}</button></div>` : ""}
         ${i.links.length ? `<div class="links small" style="margin-top:6px">${[...new Set(i.links)].map(u => `<a href="${esc(u)}" target="_blank" rel="noopener">${/tiktok/.test(u) ? "TikTok" : /youtu/.test(u) ? "YouTube" : "lien"}</a>`).join("")}</div>` : ""}
       </div></div>`;
@@ -588,6 +589,7 @@ async function runQueue(q) {
     setQ(q, "programmation…");
     await api("done", { id: q.r.id, file: q.file, date: q.date, prod: q.prod || "cam", sub: store.get("subs", true) ? "1" : "", lang: isAr(q.r) ? "ar" : "fr" });
     q.ok = true; q.blob = null; idb.del(q.key);
+    if ((q.prod || "cam") === "cam" && q.r.cost == null) api("update", { id: q.r.id, props: JSON.stringify({ "Coût ($)": { number: PRICE.subMin } }) }).catch(() => {});
     const when = new Date(q.date);
     setQ(q, when - Date.now() < 60000 ? "✓ part dans ~15 min" : "✓ " + when.toLocaleString("fr-FR", { weekday: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }));
     S.rows = S.rows.filter(x => x.id !== q.r.id); render();
@@ -661,7 +663,7 @@ $("#bNew").onclick = () => {
   $("#gCancel").onclick = () => $("#sheet").innerHTML = "";
   $("#gGo").onclick = async () => {
     const opt = { topic: $("#gTopic").value.trim(), lang: $("#gLang").value, n: +$("#gN").value, sec: +$("#gSec").value, promo: $("#gPromo").checked, mode, style: mode === "fx" ? $("#gStyle").value : o.style };
-    if (mode === "fx") opt.n = Math.min(opt.n, 3);
+    if (mode === "fx") opt.n = Math.min(opt.n, 2);
     if (!opt.topic) { toast("Écris un sujet."); return; }
     store.set("gen", opt);
     const btn = $("#gGo"); btn.disabled = true; btn.textContent = "Claude écrit…";
@@ -675,7 +677,7 @@ $("#bNew").onclick = () => {
         await api("create", { props: JSON.stringify({
           Name: { title: [{ text: { content: String(s.title || opt.topic).slice(0, 200) } }] },
           Script: rt(mode === "fx" ? (s.scenes || []).map(x => x.text).join("\n") : s.script), Description: rt(s.description), Hashtags: rt(s.hashtags), "Texte écran": rt(s.hook),
-          ...(mode === "fx" ? { "Scènes": rt(JSON.stringify({ style: opt.style, scenes: (s.scenes || []).map(x => ({ text: String(x.text || ""), image: String(x.image || "") })) })), Production: { select: { name: "Visuels IA" } } } : {}),
+          ...(mode === "fx" ? { "Scènes": rt(JSON.stringify({ style: opt.style, character: String(s.character || ""), scenes: (s.scenes || []).map(x => ({ text: String(x.text || ""), image: String(x.image || ""), motion: String(x.motion || "") })) })), Production: { select: { name: "Visuels IA" } } } : {}),
           Type: { select: { name: "Short" } }, Language: { select: { name: opt.lang } },
           Channel: { select: { name: opt.lang === "عربي" ? "Dr Fehmi AR" : "Fehmi Tlaies FR" } },
           "Pipeline Stage": { select: { name: "Script" } }, "Promo app": { checkbox: opt.promo }
@@ -689,8 +691,8 @@ $("#bNew").onclick = () => {
 /* ---------- sans visage : voix clonée (MiniMax via fal) + images (nano-banana) + montage canvas ---------- */
 const VOICE_ID = "Voice400a363b1792873199";      // voix clonée de Fehmi (fal / MiniMax)
 const STYLES = {
-  ombre: { label: "Ombres & rouge", prompt: "minimalist dark editorial illustration, flat vector style, charcoal grey background with soft vignette, simple faceless grey human figures with round heads and thin limbs, a single glowing red accent, dramatic spotlight, lots of negative space, cinematic, vertical 9:16 composition, no text, no letters" },
-  neon: { label: "Néon 3D", prompt: "holographic 3D wireframe render, glowing neon mesh lines, teal and gold neon on deep navy black background, human figures made of luminous grid lines, cinematic lighting, depth of field, vertical 9:16 composition, no text, no letters" }
+  ombre: { label: "Ombres & rouge", character: "a simple faceless grey human figure with a round head and thin limbs", prompt: "minimalist dark editorial illustration, flat vector style, charcoal grey background with soft vignette, simple faceless grey human figures with round heads and thin limbs, a single glowing red accent, dramatic spotlight, lots of negative space, cinematic, vertical 9:16 composition, no text, no letters" },
+  neon: { label: "Néon 3D", character: "a human figure made of glowing teal and gold wireframe lines", prompt: "holographic 3D wireframe render, glowing neon mesh lines, teal and gold neon on deep navy black background, human figures made of luminous grid lines, cinematic lighting, depth of field, vertical 9:16 composition, no text, no letters" }
 };
 const defStyle = lang => lang === "عربي" ? "neon" : "ombre";
 async function falRun(model, input) {
@@ -698,60 +700,138 @@ async function falRun(model, input) {
   if (r.status !== 200) throw new Error(`fal ${r.status} : ${JSON.stringify(r.data).slice(0, 140)}`);
   return r.data;
 }
+async function falQueue(model, input, firstWait = 25000) {
+  const q = await api("falq", { model, input: JSON.stringify(input) });
+  if (q.status >= 300 || !q.data?.status_url) throw new Error(`fal ${q.status} : ${JSON.stringify(q.data).slice(0, 140)}`);
+  await new Promise(ok => setTimeout(ok, firstWait));
+  for (let i = 0; i < 80; i++) {
+    const st = await api("falget", { url: q.data.status_url });
+    if (st.data?.status === "COMPLETED") {
+      const res = await api("falget", { url: q.data.response_url });
+      if (res.status >= 300) throw new Error(`fal ${res.status} : ${JSON.stringify(res.data).slice(0, 140)}`);
+      return res.data;
+    }
+    if (st.status >= 400) throw new Error(`fal ${st.status} : ${JSON.stringify(st.data).slice(0, 140)}`);
+    await new Promise(ok => setTimeout(ok, 8000));
+  }
+  throw new Error("délai dépassé chez fal");
+}
 const loadImg = url => new Promise((ok, ko) => { const i = new Image(); i.crossOrigin = "anonymous"; i.onload = () => ok(i); i.onerror = () => ko(new Error("image illisible")); i.src = url; });
-const FX = { cache: {}, ac: null, rec: null, blob: null, mime: "", lock: null };
+const FX = { cache: {}, ac: null, rec: null, blob: null, mime: "", lock: null, spent: 0 };
 function fxSteps(list) { $("#fxSteps").innerHTML = list.map(([t, st]) => `<div>${st === "ok" ? "✓" : st === "run" ? "⏳" : st === "err" ? "⚠️" : "·"} ${esc(t)}</div>`).join(""); }
 function fxButtons(html, handlers) { $("#fxBtns").innerHTML = html; for (const [id, fn] of Object.entries(handlers)) $("#" + id).onclick = fn; }
 function closeFx() { try { FX.rec?.stop(); } catch {} FX.rec = null; try { FX.lock?.release(); } catch {} $("#fx").classList.remove("on"); $("#fxv").removeAttribute("src"); render(); }
+// Une scène = une phrase de voix off + une image qui montre exactement cette phrase + un plan animé (LTX) de la même durée.
+const CLIP_MS = [6120, 8120, 10120];                 // durées réelles des plans LTX (6, 8, 10 s)
+const MOTION = "slow cinematic push-in, subtle natural movement of the scene, no camera shake";
+async function pool(items, n, fn) {
+  const out = new Array(items.length); let i = 0;
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, async () => { while (i < items.length) { const k = i++; out[k] = await fn(items[k], k); } }));
+  return out;
+}
+// Tarifs fal (oct. 2026) : voix MiniMax HD 0,10 $/1000 caractères, image nano-banana 0,039 $, animation LTX-2.3 Fast 0,04 $/s, sous-titres 0,03 $/min
+const PRICE = { tts: 0.10 / 1000, img: 0.039, imgCheap: 0.003, ltxSec: 0.04, subMin: 0.03 };
+const money = v => v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " $";
+async function tts(r, text, speed) {
+  const d = await falRun("fal-ai/minimax/speech-02-hd", {
+    text, voice_setting: { voice_id: VOICE_ID, speed: Math.min(2, Math.max(0.5, +speed.toFixed(2))), vol: 1, pitch: 0, emotion: "neutral" },
+    language_boost: isAr(r) ? "Arabic" : "French", output_format: "url"
+  });
+  if (!d.audio?.url || !d.duration_ms) throw new Error("voix non générée");
+  FX.spent += text.length * PRICE.tts;
+  return { url: d.audio.url, ms: d.duration_ms, speed };
+}
+// Voix d'une scène calée sur un plan de 6, 8 ou 10 s : on accélère légèrement si besoin, puis on complète avec une pause
+async function fitVoice(r, text) {
+  let a = await tts(r, text, 1.05);
+  const D = a.ms <= 7300 ? CLIP_MS[0] : a.ms <= 9700 ? CLIP_MS[1] : CLIP_MS[2];
+  if (a.ms > D - 80) a = await tts(r, text, a.speed * a.ms / (D - 180));
+  else if (a.ms < D - 700) a = await tts(r, text, Math.max(0.92, a.speed * a.ms / (D - 300)));
+  const pad = (D - a.ms - 40) / 1000;
+  if (pad > 0.12) a = await tts(r, `${text} <#${pad.toFixed(2)}#>`, a.speed);
+  return { ...a, D };
+}
+async function rescene(r) {
+  // Anciens scripts : on redécoupe le texte en scènes courtes (image fidèle + mouvement), par morceaux de 3 phrases en parallèle
+  const sentences = r.script.replace(/\n+/g, " ").match(/[^.!?؟…]+[.!?؟…]+|[^.!?؟…]+$/g)?.map(x => x.trim()).filter(Boolean) || [r.script];
+  const chunks = []; for (let i = 0; i < sentences.length; i += 3) chunks.push(sentences.slice(i, i + 3).join(" "));
+  const parts = await pool(chunks, 4, async chunk => {
+    const out = await api("gen", { prompt: `Découpe ce passage de voix off en scènes, SANS changer le texte (mot pour mot, dans l'ordre, rien ajouté ni retiré).
+Langue : ${isAr(r) ? "arabe" : "français"}. Passage :
+${chunk}
+${SCENE_RULES}
+Réponds UNIQUEMENT en JSON : {"scenes": [{"text": "...", "image": "...", "motion": "..."}]}` });
+    const j = parseJSON(out.text);
+    if (!j?.scenes?.length) throw new Error("découpage des scènes illisible, réessaie");
+    return j.scenes;
+  });
+  r.fx = { style: r.fx.style, character: r.fx.character || "", scenes: parts.flat() };
+  api("update", { id: r.id, props: JSON.stringify({ "Scènes": rt(JSON.stringify(r.fx)) }) }).catch(() => {});
+}
 async function makeFaceless(r, redoImages = false) {
   if (!r?.fx) return;
   $("#fx").classList.add("on"); $("#fxv").style.display = "none"; $("#fxc").style.display = "block";
   $("#fxTitle").textContent = r.name; fxButtons(`<button class="ghost" id="fxClose">Fermer</button>`, { fxClose: closeFx });
   try { FX.lock = await navigator.wakeLock?.request("screen"); } catch {}
-  const scenes = r.fx.scenes, style = STYLES[r.fx.style] ? r.fx.style : defStyle(r.lang);
+  const style = STYLES[r.fx.style] ? r.fx.style : defStyle(r.lang);
   const c = FX.cache[r.id] = FX.cache[r.id] || {};
-  if (redoImages) c.imgs = null;
-  const steps = [["Voix off (ta voix clonée)", c.audio ? "ok" : "run"], [`Images ${STYLES[style].label} (${scenes.length})`, c.imgs ? "ok" : "wait"], ["Montage", "wait"]];
+  if (redoImages) { c.imgs = null; c.clips = null; }
+  FX.spent = c.spent || 0;
+  const steps = [["Scènes", "run"], ["Voix off (ta voix clonée)", "wait"], [`Images ${STYLES[style].label}`, "wait"], ["Animation des plans", "wait"], ["Montage", "wait"]];
+  const set = (i, st, label) => { steps[i][1] = st; if (label) steps[i][0] = label; fxSteps(steps); };
   fxSteps(steps);
   try {
-    if (!c.audio) {
-      const d = await falRun("fal-ai/minimax/speech-02-hd", {
-        text: scenes.map(s => s.text).join(" <#0.3#> "),
-        voice_setting: { voice_id: VOICE_ID, speed: 1.05, vol: 1, pitch: 0, emotion: "neutral" },
-        language_boost: isAr(r) ? "Arabic" : "French", output_format: "url"
-      });
-      c.audio = d.audio?.url; c.dur = d.duration_ms; if (!c.audio) throw new Error("voix non générée");
+    if (!r.fx.scenes[0]?.motion) await rescene(r);
+    // Une scène de moins de 10 mots laisserait un long silence sur un plan de 6 s : on la fusionne avec sa voisine
+    const words = t => t.split(/\s+/).filter(Boolean).length;
+    const merged = [];
+    for (const sc of r.fx.scenes) {
+      const prev = merged[merged.length - 1];
+      if (prev && (words(prev.text) < 10 || words(sc.text) < 10) && words(prev.text) + words(sc.text) <= 19) prev.text += " " + sc.text;
+      else merged.push({ ...sc });
     }
-    steps[0][1] = "ok"; steps[1][1] = "run"; fxSteps(steps);
+    const scenes = merged, n = scenes.length;
+    set(0, "ok", `Scènes (${n})`); set(1, "run");
+    if (!c.voice) { let k = 0; c.voice = await pool(scenes, 4, async sc => { const v = await fitVoice(r, sc.text); set(1, "run", `Voix off (${++k}/${n})`); return v; }); }
+    set(1, "ok", "Voix off (ta voix clonée)"); set(2, "run");
+    const look = `${STYLES[style].prompt}. Recurring character in every scene: ${r.fx.character || STYLES[style].character}`;
     if (!c.imgs) {
-      let done = 0;
-      c.imgs = await Promise.all(scenes.map(async sc => {
-        const prompt = `${sc.image}, ${STYLES[style].prompt}`;
+      let k = 0;
+      c.imgs = await pool(scenes, 5, async sc => {
+        const prompt = `${sc.image}. ${look}`;
         let url;
-        try { url = (await falRun("fal-ai/nano-banana", { prompt, num_images: 1, aspect_ratio: "9:16" })).images?.[0]?.url; }
-        catch { url = (await falRun("fal-ai/flux/schnell", { prompt, num_images: 1, image_size: "portrait_16_9", output_format: "png" })).images?.[0]?.url; }
-        steps[1][0] = `Images ${STYLES[style].label} (${++done}/${scenes.length})`; fxSteps(steps);
-        return url;
-      }));
+        try { url = (await falRun("fal-ai/nano-banana", { prompt, num_images: 1, aspect_ratio: "9:16" })).images?.[0]?.url; FX.spent += PRICE.img; }
+        catch { url = (await falRun("fal-ai/flux/schnell", { prompt, num_images: 1, image_size: "portrait_16_9", output_format: "png" })).images?.[0]?.url; FX.spent += PRICE.imgCheap; }
+        set(2, "run", `Images (${++k}/${n})`); return url;
+      });
+      c.clips = null;
     }
-    steps[1][1] = "ok"; steps[2][1] = "run"; fxSteps(steps);
-    // Montage côté serveur (toutes les images en PNG : fal compose s'arrête au premier changement de format) : 1re image avec l'accroche incrustée, puis images + voix assemblées par fal (H.264 + AAC, lisible partout)
-    const first = c.imgs[0];
-    const hookUrl = r.hook ? await hookFrame(first, r) : first;
-    const dur = c.dur || 30000;
-    const wts = scenes.map(s => Math.max(8, s.text.length)), sum = wts.reduce((a, b) => a + b, 0);
-    let t = 0;
-    const keys = c.imgs.map((u, i) => { const d = i === c.imgs.length - 1 ? dur - t + 600 : Math.round(wts[i] / sum * dur); const k = { url: i ? u : hookUrl, timestamp: t, duration: d }; t += d; return k; });
-    keys.push({ url: keys[keys.length - 1].url, timestamp: t, duration: 200 }); // image finale : la vidéo dure jusqu'au bout de la voix
-    const out = await falRun("fal-ai/ffmpeg-api/compose", { tracks: [
-      { id: "img", type: "image", keyframes: keys },
-      { id: "voice", type: "audio", keyframes: [{ url: c.audio, timestamp: 0, duration: dur }] }
-    ] });
+    set(2, "ok", `Images ${STYLES[style].label}`); set(3, "run");
+    if (!c.clips) {
+      const first = r.hook ? await hookFrame(c.imgs[0], r) : c.imgs[0];
+      let k = 0;
+      c.clips = await pool(scenes, 8, async (sc, i) => {
+        const input = { image_url: i ? c.imgs[i] : first, prompt: `${sc.motion || MOTION}${i === 0 && r.hook ? ". The yellow title text at the top stays still and readable at the start" : ""}`,
+          duration: Math.round(c.voice[i].D / 1000), resolution: "1080p", aspect_ratio: "9:16", fps: 25, generate_audio: false };
+        let d;
+        try { d = await falQueue("fal-ai/ltx-2.3/image-to-video/fast", input); } catch { d = await falQueue("fal-ai/ltx-2.3/image-to-video/fast", input); }
+        if (!d.video?.url) throw new Error("animation du plan " + (i + 1) + " échouée");
+        FX.spent += input.duration * PRICE.ltxSec;
+        set(3, "run", `Animation des plans (${++k}/${n})`); return d.video.url;
+      });
+    }
+    set(3, "ok", "Animation des plans"); set(4, "run");
+    // fal compose met les plans et les voix bout à bout : chaque voix a exactement la durée de son plan
+    let t = 0; const vk = [], ak = [];
+    scenes.forEach((sc, i) => { const D = c.voice[i].D; vk.push({ url: c.clips[i], timestamp: t, duration: D }); ak.push({ url: c.voice[i].url, timestamp: t, duration: D }); t += D; });
+    const out = await falRun("fal-ai/ffmpeg-api/compose", { tracks: [{ id: "video", type: "video", keyframes: vk }, { id: "voice", type: "audio", keyframes: ak }] });
     if (!out.video_url) throw new Error("montage serveur échoué");
     c.video = out.video_url;
-    steps[2][1] = "ok"; fxSteps(steps);
+    const total = c.voice.reduce((a, v) => a + v.D, 0) / 1000;
+    c.spent = FX.spent; r.cost = +(FX.spent + Math.ceil(total / 60) * PRICE.subMin).toFixed(2);
+    set(4, "ok", `Montage — vidéo de ${Math.round(total)} s · coût ${money(r.cost)} (sous-titres inclus)`);
     // Enregistré tout de suite dans Notion : la vidéo reste visible sur sa carte même sans publier
-    r.link = c.video; api("update", { id: r.id, props: JSON.stringify({ Link: { url: c.video } }) }).catch(() => {});
+    r.link = c.video; api("update", { id: r.id, props: JSON.stringify({ Link: { url: c.video }, "Coût ($)": { number: r.cost } }) }).catch(() => {});
     const v = $("#fxv"); v.src = c.video; v.style.display = "block"; $("#fxc").style.display = "none";
     fxButtons(`<button class="ghost" id="fxRedo">↺ Autres images</button><button class="pri" id="fxKeep">✓ Publier</button>`, {
       fxRedo: () => makeFaceless(r, true),
@@ -824,17 +904,23 @@ function renderFaceless(r, scenes, imgs, buf, onTick) {
     FX.rec.start(1000); t0 = ac.currentTime + 0.05; src.start(t0); requestAnimationFrame(frame);
   });
 }
+const SCENE_RULES = `Règles des scènes (rétention maximale) :
+- Une scène = 13 à 16 mots de voix off (environ 6 secondes à l'oral) : regroupe les phrases très courtes avec la suivante. Jamais moins de 11 mots, jamais plus de 18.
+- "image" (en anglais) montre LITTÉRALEMENT ce que dit la phrase : le même sujet, la même action, le même objet. Si la phrase est abstraite, montre la situation concrète du quotidien qu'elle évoque (ex. « ton cerveau te ment » → a man in bed at night staring at a giant glowing alarm clock). Une seule idée, un seul point focal, cadrage précisé (close-up, medium shot, wide shot). Varie les cadrages d'une scène à l'autre. Aucun texte dans l'image.
+- "motion" (en anglais) : le mouvement du plan pendant ces 5 secondes, lié à la phrase (ex. "slow push-in on his face as the clock light pulses", "the shadow slowly grows on the wall"). Mouvements lents et fluides, pas de tremblement.
+- "character" : décris une fois le personnage récurrent (sans visage détaillé) pour qu'il soit identique dans toutes les images.`;
 function facelessPrompt(o) {
   return `Tu écris des vidéos courtes SANS VISAGE (voix off + illustrations animées) pour le Dr Fehmi, médecin : santé mentale, anxiété, sommeil, arrêt du tabac, IA en santé. La voix off est la sienne.
 Écris ${o.n} vidéo${o.n > 1 ? "s" : ""} DIFFÉRENTE${o.n > 1 ? "S" : ""} sur : ${o.topic}
 Langue de la voix off : ${o.lang === "عربي" ? "arabe tunisien (darija) naturel et clair" : "français parlé, tutoiement"}.
 Durée : ${o.sec} secondes (~${Math.round(o.sec * 2.4)} mots au total).
 ${RETENTION}
-Découpe en 6 à 9 scènes. Chaque scène = 1 ou 2 phrases de voix off + une description d'image EN ANGLAIS : une seule idée visuelle concrète ou une métaphore forte, personnages sans visage détaillé, aucun texte dans l'image, rien de choquant.
-La 1re scène porte l'accroche et doit avoir l'image la plus intrigante.
+Découpe en ${Math.max(6, Math.round(o.sec / 5.5))} à ${Math.round(o.sec / 4.5)} scènes.
+${SCENE_RULES}
+La 1re scène porte l'accroche et doit avoir l'image la plus intrigante. Rien de choquant.
 ${o.promo ? "Mentionne naturellement son app « Vague » pour arrêter de fumer." : "Pas de promotion."}
 Ne donne pas de conseil médical dangereux ; reste factuel et prudent.
-Réponds UNIQUEMENT en JSON : [{"title": "titre YouTube 60 caractères max", "hook": "texte écran 3 à 6 mots", "description": "2-3 phrases + question, sans hashtags", "hashtags": "5 à 8 hashtags", "scenes": [{"text": "voix off", "image": "english visual description"}]}]`;
+Réponds UNIQUEMENT en JSON : [{"title": "titre YouTube 60 caractères max", "hook": "texte écran 3 à 6 mots", "description": "2-3 phrases + question, sans hashtags", "hashtags": "5 à 8 hashtags", "character": "recurring character description in english", "scenes": [{"text": "voix off", "image": "english literal visual", "motion": "english camera/subject motion"}]}]`;
 }
 
 render();
