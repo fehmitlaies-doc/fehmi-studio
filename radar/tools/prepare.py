@@ -31,5 +31,7 @@ for f in ('Fraunces.ttf', 'Archivo.ttf', 'Cairo-ar.ttf', 'Cairo-la.ttf'):
     shutil.copy(f'{PACK}/{f}', f'{D}/assets/{f}')
 for f in os.listdir(f'{PACK}/music'):
     shutil.copy(f'{PACK}/music/{f}', f'{D}/assets/music_{f}')
+for f in os.listdir(f'{PACK}/sfx'):
+    shutil.copy(f'{PACK}/sfx/{f}', f'{D}/assets/sfx_{f}')
 json.dump(job, open(f'{D}/job.json', 'w'), ensure_ascii=False)
 print('préparé :', len(job['plans']), 'plans, langue', job.get('lang'))

@@ -4,7 +4,7 @@
 #   <dossier>/assets/voice.m4a      voix (la tienne ou la voix clonée)
 #   <dossier>/assets/transcript.json  mots horodatés (hyperframes transcribe)
 # Sortie : index.html, assets/voice_final.m4a (prises ratées et longs silences coupés), timing.json
-import json, re, sys, subprocess, unicodedata, difflib, html as H
+import json, os, re, sys, subprocess, unicodedata, difflib, html as H
 
 D = sys.argv[1]
 W, HT = 1080, 1920
@@ -17,6 +17,9 @@ except Exception:
 probe = lambda f: float(subprocess.check_output(['ffprobe', '-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', f]).decode())
 src_dur = probe(f'{D}/assets/voice.m4a')
 
+def nb(t):  # espace insécable avant ? ! : ; » et après « (jamais de « ? » seul en début de ligne)
+    return re.sub(r'\s+([?!:;»؟])', '\u00a0\\1', re.sub(r'«\s+', '«\u00a0', str(t)))
+
 def norm(s):
     s = ''.join(c for c in unicodedata.normalize('NFD', s.lower()) if unicodedata.category(c) != 'Mn')
     return re.sub(r'[\W_]+', '', s)
@@ -25,7 +28,7 @@ def norm(s):
 words = []
 for pi, p in enumerate(plans):
     for w in p['say'].split():
-        if words and words[-1]['p'] == pi and re.fullmatch(r'[?!:;»؟،]', w):
+        if words and words[-1]['p'] == pi and re.fullmatch(r'[?!:;»؟،.,…]+', w):
             words[-1]['t'] += ' ' + w
         elif w == '«':
             words.append({'t': w + ' ', 'p': pi, 'glue': 1})
@@ -110,20 +113,9 @@ fc += ''.join(f'[k{i}]' for i in range(len(keep))) + f'concat=n={len(keep)}:v=0:
 subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', f'{D}/assets/voice.m4a', '-filter_complex', fc, '-map', '[out]', '-c:a', 'aac', '-b:a', '192k', f'{D}/assets/voice_final.m4a'], check=True)
 dur = probe(f'{D}/assets/voice_final.m4a')
 
-# musique libre de droits (générée pour le Studio) à −20 dB sous la voix, fondu d'entrée et de sortie
 END = dur + 1.6
-music = job.get('music') or 'calme'
-audio_src, audio_dur = 'voice_final.m4a', dur
-try:
-    if music != 'none':
-        mf = f'{D}/assets/music_{music}.m4a'
-        open(mf).close()
-        subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', f'{D}/assets/voice_final.m4a', '-stream_loop', '-1', '-i', mf, '-filter_complex',
-                        f'[1:a]volume=-20dB,atrim=0:{END:.2f},afade=t=in:d=1.5,afade=t=out:st={END - 2:.2f}:d=2[m];[0:a]apad=whole_dur={END:.2f}[v];[v][m]amix=inputs=2:duration=first:normalize=0[out]',
-                        '-map', '[out]', '-c:a', 'aac', '-b:a', '192k', f'{D}/assets/mix.m4a'], check=True)
-        audio_src, audio_dur = 'mix.m4a', END
-except (OSError, subprocess.CalledProcessError):
-    pass
+SFX = []  # (son, instant, gain dB) — placés automatiquement selon les animations
+sfx_on = job.get('sfx', True) is not False
 
 starts = [0] + [max(0, next(w for w in words if w['p'] == pi)['s'] - 0.2) for pi in range(1, len(plans))]
 ends = starts[1:] + [END]
@@ -161,39 +153,72 @@ body{{margin:0;width:{W}px;height:{HT}px;overflow:hidden;background:#17121C}}
 .hot{{color:#F2A541}}
 .g{{position:absolute;left:0;right:0;opacity:0}}
 .lbl{{font-family:"{CF}";font-weight:800;font-size:38px;letter-spacing:{0 if AR else 3}px;color:#F2A541;text-align:center;direction:{DIR}}}
-.card{{position:absolute;left:150px;right:150px;top:1040px;background:rgba(246,238,227,.07);border:2px solid rgba(242,165,65,.45);border-radius:28px;padding:26px 34px;text-align:center;direction:{DIR};opacity:0}}
+.card{{position:absolute;left:150px;right:150px;top:1040px;background:rgba(23,18,28,.9);border:2px solid rgba(242,165,65,.45);border-radius:28px;padding:26px 34px;text-align:center;direction:{DIR};opacity:0}}
 .card b{{display:block;font-family:"{TF}";font-weight:800;font-size:46px;color:#F6EEE3}}
 .card i{{display:block;font-style:normal;font-family:"Archivo","Cairo";font-weight:800;font-size:28px;color:#A89AA6;margin-top:10px}}
 #fade{{position:absolute;inset:0;background:#17121C;opacity:0}}
+#prog{{position:absolute;left:0;top:0;height:10px;width:{W}px;background:#F2A541;transform-origin:{"right" if AR else "left"} center;opacity:.9}}
+.panel{{position:absolute;left:130px;right:130px;top:1010px;background:rgba(23,18,28,.82);border:2px solid rgba(242,165,65,.35);border-radius:28px;padding:22px 30px;direction:{DIR};opacity:0}}
+.it{{display:flex;align-items:center;gap:20px;font-family:"{CF}";font-weight:800;font-size:42px;color:#F6EEE3;padding:8px 0}}
+.it b{{flex:none;width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:34px;color:#17121C;background:#F2A541}}
+.it.no b{{background:#3A2E40;color:#A89AA6}}
+.split{{position:absolute;left:110px;right:110px;top:1000px;display:flex;gap:24px;direction:{DIR}}}
+.split div{{flex:1;border-radius:26px;padding:22px 24px;text-align:center;opacity:0}}
+.split small{{display:block;font-family:"Archivo","Cairo";font-weight:800;font-size:26px;letter-spacing:{0 if AR else 2}px;text-transform:uppercase;margin-bottom:8px}}
+.split p{{margin:0;font-family:"{TF}";font-weight:800;font-size:40px;line-height:1.15;color:#F6EEE3}}
+.sl{{background:rgba(58,46,64,.92)}} .sl small{{color:#A89AA6}}
+.sr{{background:rgba(242,165,65,.16);border:2px solid #F2A541}} .sr small{{color:#F2A541}}
+.quote{{position:absolute;left:120px;right:120px;top:1020px;background:rgba(23,18,28,.85);border-radius:26px;padding:10px 24px 24px;text-align:center;direction:{DIR};font-family:"{TF}";font-weight:800;font-style:{"normal" if AR else "italic"};font-size:50px;line-height:1.2;color:#F6EEE3;opacity:0}}
+.quote:before{{content:"“";display:block;font-size:110px;line-height:.6;color:#F2A541}}
+.bigw{{position:absolute;left:0;right:0;top:700px;text-align:center;font-family:"{TF}";font-weight:800;font-size:{150 if AR else 170}px;line-height:1;color:#F2A541;text-shadow:0 10px 40px rgba(23,18,28,.9),0 0 4px #17121C;opacity:0}}
+.stamp{{position:absolute;right:120px;top:560px;font-family:"{TF}";font-weight:800;font-size:110px;color:#F2A541;border:10px solid #F2A541;border-radius:18px;padding:0 30px;background:rgba(23,18,28,.85);opacity:0}}
+.timer{{position:absolute;left:440px;top:1040px;width:200px;height:200px;opacity:0}}
+.timer span{{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:"Fraunces";font-weight:800;font-size:96px;color:#F6EEE3}}
 '''
 ghost = H.escape((' · '.join([job.get('ghost') or 'RESPIRE'] * 3)))
 h = [f'<!DOCTYPE html><html lang="{"ar" if AR else "fr"}"><head><meta charset="UTF-8"><script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script><style>{css}</style></head><body>',
      f'<div id="root" data-composition-id="main" data-width="{W}" data-height="{HT}" data-start="0" data-duration="{END:.2f}">',
-     f'<audio id="voice" data-start="0" data-duration="{audio_dur:.2f}" data-track-index="1" src="assets/{audio_src}"></audio>',
+     '<!-- audio : ajouté après le mixage -->',
      f'<div class="ghost" id="ghost" data-layout-ignore>{ghost}</div><div class="halo" id="halo" data-layout-ignore></div>',
+     '<div id="prog"></div>',
      f'<div class="sig" id="sig">{"د. فهمي · علم النفس" if AR else "Dr Fehmi · Psychologie"}</div>']
 js = ['window.__timelines=window.__timelines||{};var tl=gsap.timeline({paused:true});',
       f'tl.fromTo("#ghost",{{x:{-2600 if AR else 0}}},{{x:{0 if AR else -2600},duration:{END:.2f},ease:"none"}},0);',
       f'tl.fromTo("#halo",{{scale:.92,opacity:.75}},{{scale:1.08,opacity:1,duration:2.2,ease:"sine.inOut",yoyo:true,repeat:{int(END / 2.2)}}},0);',
-      'tl.from("#sig",{y:-20,opacity:0,duration:.6,ease:"power2.out"},0.1);']
+      'tl.from("#sig",{y:-20,opacity:0,duration:.6,ease:"power2.out"},0.1);',
+      f'tl.fromTo("#prog",{{scaleX:0}},{{scaleX:1,duration:{END:.2f},ease:"none"}},0);']
 
 for i, p in enumerate(plans):
     a, b, fu = starts[i], ends[i], 0.45
     same_prev = i and plans[i - 1]['_file'] == p['_file']
     same_next = i < len(plans) - 1 and plans[i + 1]['_file'] == p['_file']
-    h.append(f'<div class="ttl" id="t{i}">{H.escape(p.get("title", ""))}</div>')
+    h.append(f'<div class="ttl" id="t{i}">{H.escape(nb(p.get("title", "")))}</div>')
     h.append(f'<div class="ill" id="i{i}"><img src="assets/{p["_file"]}"></div>')
-    js.append(f'tl.set("#i{i}",{{opacity:1}},{a:.2f});' if same_prev else f'tl.fromTo("#i{i}",{{opacity:0,y:40}},{{opacity:1,y:0,duration:{fu},ease:"power2.out"}},{a:.2f});')
-    js.append(f'tl.fromTo("#i{i} img",{{scale:1}},{{scale:1.06,duration:{b - a + 0.5:.2f},ease:"sine.inOut"}},{a:.2f});')
-    js.append(f'tl.fromTo("#t{i}",{{opacity:0,y:30}},{{opacity:1,y:0,duration:{fu},ease:"power3.out"}},{a + 0.05:.2f});')
+    if i == 0:  # accroche : image visible dès la 1re image, coup de zoom (pas de fondu depuis le noir)
+        js.append('tl.fromTo("#i0",{opacity:1,scale:1.18},{opacity:1,scale:1,duration:.5,ease:"expo.out"},0);')
+        js.append('tl.fromTo("#t0",{opacity:1,scale:1.12},{opacity:1,scale:1,duration:.45,ease:"expo.out"},0);')
+        SFX.append(('impact', 0.0, -9))
+    else:
+        js.append(f'tl.set("#i{i}",{{opacity:1}},{a:.2f});' if same_prev else f'tl.fromTo("#i{i}",{{opacity:0,y:40}},{{opacity:1,y:0,duration:{fu},ease:"power2.out"}},{a:.2f});')
+        js.append(f'tl.fromTo("#t{i}",{{opacity:0,y:30}},{{opacity:1,y:0,duration:{fu},ease:"power3.out"}},{a + 0.05:.2f});')
+        if not same_prev: SFX.append(('whoosh', max(0, a - 0.25), -17))
+    # mouvement de caméra varié d'un plan à l'autre (zoom avant, arrière, glissement gauche/droite)
+    mv = ['{scale:1,x:0},{scale:1.08,x:0', '{scale:1.1,x:0},{scale:1,x:0', '{scale:1.06,x:-24},{scale:1.06,x:24', '{scale:1.06,x:24},{scale:1.06,x:-24'][i % 4]
+    js.append(f'tl.fromTo("#i{i} img",{mv},duration:{b - a + 0.5:.2f},ease:"sine.inOut"}},{a:.2f});')
+    img = p.get('img', '')
+    if img in ('scroll_bed', 'phone_night', 'screens'): SFX.append(('phone', a + 0.3, -16))
+    if img in ('journal',): SFX.append(('scribble', a + 0.4, -18))
+    if img in ('clock_night',): SFX.append(('tick', a + 0.3, -14)); SFX.append(('tick', a + 1.3, -14))
     if i < len(plans) - 1:
         js.append(f'tl.set("#t{i}",{{opacity:0}},{b:.2f});tl.set("#i{i}",{{opacity:0}},{b + (0 if same_next else fu):.2f});')
     pw = [w for w in words if w['p'] == i]
     g = p.get('gfx') or 'none'
     if g == 'ring':  # anneau ambre qui se dessine pendant le plan
         h.append(f'<svg class="g" id="ring{i}" style="top:430px;left:140px;width:800px;height:800px" viewBox="0 0 800 800"><circle cx="400" cy="400" r="380" fill="none" stroke="#F2A541" stroke-width="6" stroke-linecap="round" stroke-dasharray="2388" stroke-dashoffset="2388" transform="rotate(-90 400 400)"/></svg>')
+        SFX.append(('riser', max(0, b - 2.2), -20))
         js.append(f'tl.set("#ring{i}",{{opacity:1}},{a:.2f});tl.to("#ring{i} circle",{{strokeDashoffset:0,duration:{b - a:.2f},ease:"none"}},{a:.2f});tl.set("#ring{i}",{{opacity:0}},{b:.2f});')
     elif g == 'pulse':  # le personnage tremble : tension
+        SFX.append(('heartbeat', a + 0.2, -12))
         js.append(f'tl.to("#i{i} img",{{x:6,duration:.07,ease:"none",yoyo:true,repeat:{max(1, int((b - a) / .39)) * 2 - 1},repeatDelay:.25}},{a + 0.3:.2f});')
     elif g == 'breath':  # cercle qui gonfle / se vide, étiquettes sur les mots-clés
         steps = (p.get('steps') or ['INSPIRE', 'EXPIRE'])[:3]
@@ -209,20 +234,24 @@ for i, p in enumerate(plans):
             nxt = at[k + 1] if k + 1 < len(steps) else b
             last = k == len(steps) - 1
             js.append(f'tl.to("#brc{i}",{{scale:{scales[k]},duration:{max(.4, (nxt - at[k] - .1) if last else min(1.1, nxt - at[k])):.2f},ease:"sine.inOut"}},{at[k]:.2f});')
-            h.append(f'<div class="g lbl" id="bl{i}_{k}" style="top:1225px">{H.escape(s)}</div>')
+            h.append(f'<div class="g lbl" id="bl{i}_{k}" style="top:1225px">{H.escape(nb(s))}</div>')
             js.append(f'tl.fromTo("#bl{i}_{k}",{{opacity:0,y:20}},{{opacity:1,y:0,duration:.3,ease:"power2.out"}},{at[k]:.2f});tl.set("#bl{i}_{k}",{{opacity:0}},{nxt:.2f});')
         js.append(f'tl.set("#br{i}",{{opacity:0}},{b:.2f});')
+        SFX.append(('breath', at[-1], -16))
     elif g == 'cta':  # mot à écrire en commentaire
         h.append(f'<div class="g" id="cta{i}" style="top:1050px;text-align:center"><span style="display:inline-block;font-family:{TF};font-weight:800;font-size:96px;color:#17121C;background:#F2A541;border-radius:999px;padding:6px 60px 18px">{H.escape(p.get("cta", ""))}</span></div>')
+        SFX.append(('pop', a + .5, -10))
         js.append(f'tl.fromTo("#cta{i}",{{opacity:0,scale:.6}},{{opacity:1,scale:1,duration:.5,ease:"back.out(2)"}},{a + .5:.2f});tl.set("#cta{i}",{{opacity:0}},{b:.2f});')
     elif g == 'ecg':  # rythme cardiaque qui ralentit
         path = 'M0 70 H120 L140 70 L155 15 L172 125 L188 70 H330 L350 70 L365 15 L382 125 L398 70 H600 L620 70 L635 15 L652 125 L668 70 H860'
         h.append(f'<svg class="g" id="ecg{i}" style="top:1110px;left:110px;width:860px;height:140px" viewBox="0 0 860 140"><path d="{path}" fill="none" stroke="#F2A541" stroke-width="7" stroke-linejoin="round" stroke-dasharray="1400" stroke-dashoffset="1400"/></svg>')
+        SFX.append(('heartbeat', a + .2, -13))
         js.append(f'tl.set("#ecg{i}",{{opacity:1}},{a + .2:.2f});tl.to("#ecg{i} path",{{strokeDashoffset:0,duration:{max(1, b - a - .4):.2f},ease:"power1.out"}},{a + .2:.2f});tl.set("#ecg{i}",{{opacity:0}},{b:.2f});')
     elif g == 'card' and p.get('card'):  # source, chiffre ou conseil
         c = p['card']
         sub = f'<i>{H.escape(c["i"])}</i>' if c.get('i') else ''
-        h.append(f'<div class="card" id="card{i}"><b>{H.escape(c.get("b", ""))}</b>{sub}</div>')
+        h.append(f'<div class="card" id="card{i}"><b>{H.escape(nb(c.get("b", "")))}</b>{sub}</div>')
+        SFX.append(('pop', a + min(1.2, (b - a) / 3), -14))
         js.append(f'tl.fromTo("#card{i}",{{opacity:0,y:40}},{{opacity:1,y:0,duration:.5,ease:"power3.out"}},{a + min(1.2, (b - a) / 3):.2f});tl.set("#card{i}",{{opacity:0}},{b:.2f});')
     elif g == 'count':  # 1 · 2 · 3
         n = max(2, min(5, int(p.get('count') or 3)))
@@ -230,14 +259,88 @@ for i, p in enumerate(plans):
         js.append(f'tl.set("#x{i}",{{opacity:1}},{a + .3:.2f});')
         for k in range(n):
             js.append(f'tl.fromTo("#d{i}_{k}",{{scale:0,backgroundColor:"rgba(242,165,65,0)"}},{{scale:1,backgroundColor:"#F2A541",duration:.4,ease:"back.out(2.4)"}},{a + .5 + k * min(.45, (b - a - 1) / n):.2f});')
+            SFX.append(('ding', a + .5 + k * min(.45, (b - a - 1) / n), -17))
         js.append(f'tl.set("#x{i}",{{opacity:0}},{b:.2f});')
+    elif g == 'check' and p.get('items'):  # liste ✓ / ✗ qui apparaît élément par élément
+        items = p['items'][:3]
+        h.append(f'<div class="panel" id="ck{i}">' + ''.join(f'<div class="it{"" if it.get("ok", True) else " no"}" id="ck{i}_{k}"><b>{"✓" if it.get("ok", True) else "✗"}</b><span>{H.escape(str(it.get("t", "")))}</span></div>' for k, it in enumerate(items)) + '</div>')
+        js.append(f'tl.fromTo("#ck{i}",{{opacity:0,y:30}},{{opacity:1,y:0,duration:.35,ease:"power3.out"}},{a + .3:.2f});tl.set("#ck{i}",{{opacity:0}},{b:.2f});')
+        step = min(1.1, max(.5, (b - a - 1) / max(1, len(items))))
+        for k in range(len(items)):
+            t0 = a + .5 + k * step
+            js.append(f'tl.from("#ck{i}_{k}",{{opacity:0,x:{40 if AR else -40},duration:.3,ease:"back.out(1.8)"}},{t0:.2f});')
+            SFX.append(('pop', t0, -15))
+    elif g == 'split' and p.get('left') and p.get('right'):  # avant / après, mythe / vérité
+        L, Rr = p['left'], p['right']
+        h.append(f'<div class="split"><div class="sl" id="sl{i}"><small>{H.escape(str(L.get("label", "")))}</small><p>{H.escape(str(L.get("t", "")))}</p></div><div class="sr" id="sr{i}"><small>{H.escape(str(Rr.get("label", "")))}</small><p>{H.escape(str(Rr.get("t", "")))}</p></div></div>')
+        t1 = a + .3; t2 = a + max(.9, (b - a) * .45)
+        js.append(f'tl.fromTo("#sl{i}",{{opacity:0,y:30}},{{opacity:1,y:0,duration:.35,ease:"power3.out"}},{t1:.2f});tl.fromTo("#sr{i}",{{opacity:0,scale:.8}},{{opacity:1,scale:1,duration:.45,ease:"back.out(2)"}},{t2:.2f});')
+        js.append(f'tl.set(["#sl{i}","#sr{i}"],{{opacity:0}},{b:.2f});')
+        SFX.append(('whoosh', t1, -20)); SFX.append(('pop', t2, -12))
+    elif g == 'quote' and p.get('quote'):  # phrase à retenir
+        h.append(f'<div class="quote" id="q{i}">{H.escape(nb(p["quote"]))}</div>')
+        js.append(f'tl.fromTo("#q{i}",{{opacity:0,y:30}},{{opacity:1,y:0,duration:.6,ease:"power2.out"}},{a + .3:.2f});tl.set("#q{i}",{{opacity:0}},{b:.2f});')
+    elif g == 'bigword' and p.get('word'):  # mot-choc géant : rupture de rythme
+        kw = norm(str(p['word']).split()[0])
+        t0 = next((w['s'] for w in pw if kw and norm(w['t']).startswith(kw[:5])), a + .4)
+        h.append(f'<div class="bigw" id="bw{i}">{H.escape(str(p["word"]))}</div>')
+        js.append(f'tl.fromTo("#bw{i}",{{opacity:0,scale:2.2}},{{opacity:1,scale:1,duration:.3,ease:"expo.out"}},{t0:.2f});tl.to("#bw{i}",{{opacity:0,scale:.9,duration:.3,ease:"power2.in"}},{min(b - .1, t0 + 1.4):.2f});')
+        js.append(f'tl.fromTo("#i{i}",{{x:0}},{{x:10,duration:.05,yoyo:true,repeat:5,ease:"none"}},{t0:.2f});')
+        SFX.append(('impact', t0, -10))
+    elif g == 'stamp' and p.get('stamp'):  # tampon FAUX / VRAI / MYTHE
+        kw = norm(str(p['stamp']).split()[0])
+        t0 = next((w['s'] for w in pw if kw and norm(w['t']).startswith(kw[:4])), a + .5)
+        h.append(f'<div class="stamp" id="st{i}">{H.escape(str(p["stamp"]))}</div>')
+        js.append(f'tl.fromTo("#st{i}",{{opacity:0,scale:2.4,rotation:-26}},{{opacity:1,scale:1,rotation:-10,duration:.32,ease:"back.out(2.2)"}},{t0:.2f});tl.set("#st{i}",{{opacity:0}},{b:.2f});')
+        SFX.append(('impact', t0, -11))
+    elif g == 'timer':  # compte à rebours (ex. « 5 secondes »)
+        n = max(3, min(10, int(p.get('seconds') or 5)))
+        circ = 565
+        h.append(f'<div class="timer" id="tm{i}"><svg viewBox="0 0 200 200" width="200" height="200"><circle cx="100" cy="100" r="90" fill="none" stroke="#3A2E40" stroke-width="10"/><circle id="tmc{i}" cx="100" cy="100" r="90" fill="none" stroke="#F2A541" stroke-width="10" stroke-linecap="round" stroke-dasharray="{circ}" stroke-dashoffset="0" transform="rotate(-90 100 100)"/></svg>' + ''.join(f'<span id="tn{i}_{k}" style="opacity:0">{n - k}</span>' for k in range(n)) + '</div>')
+        t0 = a + .3; span = min(n, max(2.0, b - a - .6))
+        js.append(f'tl.set("#tm{i}",{{opacity:1}},{t0:.2f});tl.to("#tmc{i}",{{strokeDashoffset:{circ},duration:{span:.2f},ease:"none"}},{t0:.2f});tl.set("#tm{i}",{{opacity:0}},{b:.2f});')
+        for k in range(n):
+            tk = t0 + k * span / n
+            js.append(f'tl.set("#tn{i}_{k}",{{opacity:1}},{tk:.2f});tl.set("#tn{i}_{k}",{{opacity:0}},{tk + span / n:.2f});')
+            SFX.append(('tick', tk, -16))
 
 for gi, gr in enumerate(groups):
-    h.append(f'<div class="cap" id="c{gi}">' + ''.join(word_html(w) for w in gr) + '</div>')
+    h.append(f'<div class="cap" id="c{gi}">' + ''.join(word_html(w).replace('<span class="hot"', f'<span class="hot" id="h{gi}_{k}"', 1) for k, w in enumerate(gr)) + '</div>')
+    for k, w in enumerate(gr):
+        if 'class="hot"' in word_html(w):
+            js.append(f'tl.fromTo("#h{gi}_{k}",{{color:"#FFF4DC"}},{{color:"#F2A541",duration:.35,ease:"power1.out",immediateRender:false}},{w["s"]:.2f});')
     s0 = gr[0]['s']
     nxt = groups[gi + 1][0]['s'] if gi + 1 < len(groups) else END
     e0 = min(max(gr[-1]['e'] + .12, s0 + .5), nxt)
+    if e0 - s0 < .12: continue  # minutage incohérent : on ne montre pas ce sous-titre plutôt que de le laisser figé
     js.append(f'tl.fromTo("#c{gi}",{{opacity:0,y:16}},{{opacity:1,y:0,duration:.18,ease:"power2.out"}},{s0:.2f});tl.set("#c{gi}",{{opacity:0}},{e0:.2f});')
+
+# mixage : voix + musique (−20 dB, fondus) + effets sonores aux instants des animations
+music = job.get('music') or 'calme'
+audio_src, audio_dur = 'voice_final.m4a', dur
+ins, flt, lab = ['-i', f'{D}/assets/voice_final.m4a'], [f'[0:a]apad=whole_dur={END:.2f}[v]'], ['[v]']
+mf = f'{D}/assets/music_{music}.m4a'
+if music != 'none' and os.path.exists(mf):
+    ins += ['-stream_loop', '-1', '-i', mf]
+    flt.append(f'[1:a]volume=-20dB,atrim=0:{END:.2f},afade=t=in:d=1.5,afade=t=out:st={END - 2:.2f}:d=2[m]'); lab.append('[m]')
+if sfx_on:
+    last = {}
+    for name, t, gain in sorted(SFX, key=lambda x: x[1]):
+        f = f'{D}/assets/sfx_{name}.m4a'
+        if not os.path.exists(f) or t > END - .3 or t - last.get(name, -9) < .35: continue
+        last[name] = t
+        idx = sum(1 for x in ins if x == '-i')
+        ins += ['-i', f]
+        ms = int(t * 1000)
+        flt.append(f'[{idx}:a]volume={gain}dB,adelay={ms}|{ms}[s{idx}]'); lab.append(f'[s{idx}]')
+if len(lab) > 1:
+    flt.append(''.join(lab) + f'amix=inputs={len(lab)}:duration=first:normalize=0[out]')
+    try:
+        subprocess.run(['ffmpeg', '-v', 'error', '-y', *ins, '-filter_complex', ';'.join(flt), '-map', '[out]', '-c:a', 'aac', '-b:a', '192k', f'{D}/assets/mix.m4a'], check=True)
+        audio_src, audio_dur = 'mix.m4a', END
+    except subprocess.CalledProcessError:
+        pass
+h[2] = f'<audio id="voice" data-start="0" data-duration="{audio_dur:.2f}" data-track-index="1" src="assets/{audio_src}"></audio>'
 
 h.append('<div id="fade"></div>')
 js.append(f'tl.to("#fade",{{opacity:1,duration:1.2,ease:"power1.in"}},{END - 1.3:.2f});')

@@ -969,37 +969,67 @@ const PACK = {
   walk_light: "marche vers une porte de lumière", thinking: "assis, main au menton, réfléchit", cigarette: "tient une cigarette allumée, fumée",
   chain: "poignet enchaîné à un poids (dépendance)", mask: "tient un masque souriant devant sa tête", loop: "court dans une roue de hamster (cercle vicieux)",
   heart_calm: "main sur le cœur, calme, lueur au cœur", crowd: "rangée de personnages gris, lui seul lumineux au milieu", mirror: "devant un miroir, reflet plus sombre",
-  meditate: "assis en tailleur, médite, halo", anxious: "entouré de gribouillis (pensées qui s'emballent)", hug: "deux personnages qui s'enlacent"
+  meditate: "assis en tailleur, médite, halo", anxious: "entouré de gribouillis (pensées qui s'emballent)", hug: "deux personnages qui s'enlacent",
+  scroll_bed: "au lit la nuit, scrolle son téléphone", crying: "assis, la tête dans les mains, larmes", angry: "poings serrés, nuage de colère au-dessus",
+  spiral: "au centre d'une spirale (pensées en boucle)", couple_argue: "deux personnages qui se disputent", family: "famille à table (deux adultes, un enfant)",
+  parent_child: "un adulte à genoux serre un enfant", work_burnout: "effondré sur un bureau, pile de dossiers", running: "court, plein d'énergie",
+  sleep_peaceful: "dort paisiblement", journal: "écrit dans un carnet", breathing: "yeux fermés, l'air entre dans sa poitrine",
+  therapist: "deux fauteuils face à face (séance de thérapie)", brain: "regarde un cerveau lumineux au-dessus de lui", clock_night: "regarde une grande horloge à 3 h du matin",
+  mountain: "bras levés au sommet d'une colline, lever de soleil", rain_window: "assis près d'une fenêtre sous la pluie", closed_door: "devant une porte fermée, lumière dessous",
+  plant: "arrose une plante qui pousse", ladder: "monte une échelle vers la lumière", confused: "se gratte la tête, perplexe",
+  scale: "tient une balance", puzzle: "place une pièce de puzzle dans sa poitrine", walk_nature: "marche entre des arbres",
+  screens: "entouré d'écrans de téléphone", alone_crowd: "seul, loin d'un groupe (solitude)"
 };
+const MUSICS = { calme: "calme (piano doux)", espoir: "espoir (lumineux)", tension: "tension (suspense léger)", mystere: "mystère (curiosité)", energie: "énergie (motivation)", nuit: "nuit (lo-fi, sommeil)", oriental: "oriental (oud doux)" };
+// Techniques validées (études vérifiées sur PubMed) : Claude ne cite que celles-ci
+const TECHNIQUES = [{"id": "soupir", "nom": "Soupir physiologique (double inspiration, longue expiration)", "pour": "colère, stress, anxiété aiguë", "etapes": "2 inspirations par le nez (la 2e courte), puis longue expiration par la bouche ; 1 à 5 minutes", "preuve": "5 min/jour pendant 1 mois amélioraient davantage l'humeur que la méditation de pleine conscience", "source": "Balban et al., Cell Reports Medicine, 2023", "pmid": "36630953"}, {"id": "liste", "nom": "Liste de demain avant de dormir", "pour": "pensées le soir, endormissement", "etapes": "5 minutes avant le coucher, écrire les tâches de demain, sur papier", "preuve": "écrire sa liste de tâches faisait s'endormir plus vite qu'écrire ce qu'on a déjà fait", "source": "Scullin et al., J Exp Psychol Gen, 2018", "pmid": "29058942"}, {"id": "surf", "nom": "Surfer l'envie (urge surfing)", "pour": "envie de fumer, de grignoter, de scroller", "etapes": "observer l'envie dans le corps, la nommer, respirer, la laisser monter puis redescendre sans agir", "preuve": "des fumeurs formés à observer l'envie fumaient moins ensuite", "source": "Bowen & Marlatt, Psychol Addict Behav, 2009", "pmid": "20025372"}, {"id": "report", "nom": "Report des inquiétudes (temps d'inquiétude)", "pour": "rumination, anxiété, inquiétudes", "etapes": "noter l'inquiétude, la reporter à un créneau fixe de 15-20 min dans la journée, y penser seulement à ce moment-là", "preuve": "essai randomisé : le report des inquiétudes réduisait l'inquiétude", "source": "Krzikalla et al., Clin Psychol Eur, 2024", "pmid": "39119056"}, {"id": "nommer", "nom": "Nommer l'émotion (affect labeling)", "pour": "émotions intenses, colère, peur", "etapes": "mettre un mot précis sur ce qu'on ressent : « je ressens de la colère »", "preuve": "mettre des mots sur ses émotions diminuait l'activité de l'amygdale", "source": "Lieberman et al., Psychol Sci, 2007", "pmid": "17576282"}, {"id": "activation", "nom": "Activation comportementale", "pour": "déprime, manque d'envie, procrastination", "etapes": "planifier chaque jour 1 petite activité agréable ou utile, la faire même sans envie, noter l'humeur avant/après", "preuve": "efficace contre la dépression (revue Cochrane)", "source": "Uphoff et al., Cochrane, 2020", "pmid": "32628293"}, {"id": "exercice", "nom": "Bouger (marche, course, yoga, musculation)", "pour": "déprime, stress", "etapes": "marche rapide ou autre activité régulière, intensité adaptée", "preuve": "l'exercice réduisait la dépression ; plus l'intensité est élevée, plus l'effet est net", "source": "Noetel et al., BMJ, 2024", "pmid": "38355154"}, {"id": "mbct", "nom": "Pleine conscience (MBCT)", "pour": "prévenir la rechute dépressive, rumination", "etapes": "exercices réguliers d'attention au présent (respiration, scan corporel), accompagnés", "preuve": "la MBCT réduisait le risque de rechute dépressive", "source": "Kuyken et al., JAMA Psychiatry, 2016", "pmid": "27119968"}, {"id": "tcc_anxiete", "nom": "TCC et exposition progressive", "pour": "anxiété, phobies, évitement", "etapes": "faire face petit à petit à ce qu'on évite, en commençant par le plus facile, sans fuir", "preuve": "la TCC était efficace contre placebo pour les troubles anxieux", "source": "Carpenter et al., Depress Anxiety, 2018", "pmid": "29451967"}, {"id": "tcci", "nom": "Lit = sommeil (TCC de l'insomnie)", "pour": "insomnie", "etapes": "se lever si on ne dort pas après ~20 min, ne pas rester au lit éveillé, horaires de lever fixes", "preuve": "la TCC de l'insomnie réduisait le temps d'endormissement d'environ 20 minutes", "source": "Trauer et al., Ann Intern Med, 2015", "pmid": "26054060"}, {"id": "ecriture", "nom": "Écriture expressive", "pour": "choc émotionnel, stress, émotions retenues", "etapes": "écrire 15-20 min sur ce qu'on ressent profondément, 3-4 jours de suite", "preuve": "un effet positif, modeste, sur la santé", "source": "Frattaroli, Psychol Bull, 2006", "pmid": "17073523"}, {"id": "act", "nom": "Prendre de la distance avec ses pensées (ACT)", "pour": "pensées négatives, anxiété, addictions", "etapes": "dire « j'ai la pensée que… » au lieu de « je suis… », agir selon ses valeurs", "preuve": "l'ACT était efficace pour plusieurs troubles psychiques", "source": "A-Tjak et al., Psychother Psychosom, 2015", "pmid": "25547522"}, {"id": "compassion", "nom": "Auto-compassion", "pour": "autocritique, honte, perfectionnisme", "etapes": "se parler comme à un ami : « c'est dur, c'est humain, qu'est-ce qui m'aiderait ? »", "preuve": "les interventions d'auto-compassion réduisaient dépression, anxiété et stress", "source": "Han et al., Mindfulness, 2023", "pmid": "37362192"}, {"id": "si_alors", "nom": "Plan « si… alors… »", "pour": "arrêter de fumer, nouvelles habitudes", "etapes": "préparer : « si [situation piège], alors je [action précise] »", "preuve": "les plans si-alors aidaient l'arrêt du tabac", "source": "McWilliams et al., Health Psychol, 2019", "pmid": "31414843"}, {"id": "nature", "nom": "Marcher dans la nature", "pour": "rumination", "etapes": "marcher 90 minutes dans un espace vert", "preuve": "une marche de 90 min dans la nature réduisait la rumination, contrairement à la ville", "source": "Bratman et al., PNAS, 2015", "pmid": "26124129"}, {"id": "motivation", "nom": "Parler sans juger (entretien motivationnel)", "pour": "aider un proche qui fume, boit, résiste", "etapes": "poser des questions ouvertes, refléter, laisser la personne trouver ses propres raisons", "preuve": "efficace pour changer des comportements (synthèse de méta-analyses)", "source": "Lundahl & Burke, J Clin Psychol, 2009", "pmid": "19739205"}, {"id": "gratitude", "nom": "Gratitude", "pour": "humeur, ruminations négatives", "etapes": "noter 3 choses positives précises le soir", "preuve": "effet positif modeste", "source": "Diniz et al., Einstein, 2023", "pmid": "37585888"}, {"id": "substituts", "nom": "Substituts nicotiniques", "pour": "arrêter de fumer", "etapes": "patch + forme rapide (gomme, spray), dose adaptée avec médecin ou pharmacien", "preuve": "les associations et doses adaptées aident à arrêter (revue Cochrane)", "source": "Lindson et al., Cochrane, 2023", "pmid": "37335995"}];
 STYLES.r7 = { label: "Ambre (R7)", character: "", prompt: R7_LOOK };
 const isR7 = r => r?.fx?.style === "r7";
 const rx = { get: id => store.get("rx." + id, null), set: (id, v) => store.set("rx." + id, v), del: id => { try { localStorage.removeItem("studio.rx." + id); } catch {} } };
 
 function r7Prompt(o) {
-  return `Tu écris une vidéo courte SANS VISAGE pour le Dr Fehmi (médecin psychiatre : psychologie du quotidien, santé mentale, addictions). Il enregistre lui-même la voix off ; l'image est un motion design au style ambre avec un personnage unique.
+  return `Tu es le scénariste du Dr Fehmi, médecin psychiatre (psychologie du quotidien, santé mentale, addictions). Vidéo courte SANS VISAGE : sa voix + motion design au style ambre avec un personnage unique. Objectif : AIDER vraiment avec une technique prouvée, et garder l'attention jusqu'à la dernière seconde.
 Sujet : ${o.topic}
 ${o.version ? `Version retenue (à suivre fidèlement, avec tes propres mots) : ${o.version}` : ""}
-${o.source ? `Source scientifique fournie (la seule que tu peux citer, sans inventer de chiffre) : ${o.source}` : "Aucune étude fournie : n'écris jamais « une étude montre », formule en observation clinique. Aucun chiffre inventé."}
 Langue de la voix off : ${o.lang === "ar" ? "arabe tunisien (darija) naturel et clair, compréhensible dans tout le monde arabe" : "français parlé, tutoiement, phrases courtes"}.
-Durée : 30 à 45 secondes (85 à 115 mots au total).
-${RETENTION}
-Structure obligatoire, 7 à 9 plans de 3 à 6 secondes :
-1) accroche orale de moins de 3 s ; 2-3) reconnaissance et mécanisme caché ; vers 20 s un plan d'appel à l'action d'UN mot à écrire en commentaire ; puis la SOLUTION concrète (un geste, une règle simple) ; avant-dernier plan : si c'est un sujet de santé, invite à en parler à un professionnel ; dernier plan : « Abonne-toi … ».
-Chaque plan :
-- "say" : le texte dit (1 ou 2 phrases).
-- "title" : titre à l'écran, 2 à 6 mots, accordé avec le texte dit (genre et nombre), formulation neutre si possible. Le titre du plan 1 est le titre-accroche (miniature).
-- "img" : UNE pose du pack, choisie pour illustrer littéralement le plan : ${Object.entries(PACK).map(([k, v]) => `${k} (${v})`).join(" ; ")}.
-  Seulement si aucune pose ne convient (2 plans maximum) : ajoute "newimg" = description en anglais de la pose du même personnage (sans texte).
-- "gfx" : animation : "ring" (anneau qui se dessine, idéal plan 1), "pulse" (tension, le personnage tremble), "breath" (cercle de respiration, avec "steps" : 2 ou 3 étiquettes courtes en MAJUSCULES dont le dernier mot est prononcé dans le plan), "cta" (bouton avec "cta" : le mot à écrire), "ecg" (rythme cardiaque qui ralentit), "card" (encadré avec "card": {"b": "phrase courte", "i": "source courte"} — seulement pour la source fournie ou un conseil), "count" (pastilles 1·2·3 avec "count" = nombre d'étapes énoncées dans CE plan, 2 minimum), "none". Varie : au moins 4 plans animés (pas "none").
-- "hot" : 1 à 3 mots exacts du "say" à colorer en ambre.
-Rien de choquant, pas de diagnostic, aucun conseil médical dangereux.
-Musique de fond : "calme" (sujet grave, introspectif) ou "espoir" (solution, motivation).
-Réponds UNIQUEMENT en JSON : {"title": "titre YouTube 60 caractères max", "hook": "texte écran 3 à 6 mots", "description": "2-3 phrases + question, sans hashtags", "hashtags": "5 hashtags", "ghost": "UN mot-thème en majuscules", "music": "calme", "plans": [{"say": "", "title": "", "img": "", "gfx": "", "hot": []}]}`;
+
+TECHNIQUES PROUVÉES (choisis LA plus adaptée au sujet, explique-la précisément, étapes concrètes ; cite uniquement sa source, telle quelle) :
+${TECHNIQUES.map(t => `- [${t.id}] ${t.nom} — pour : ${t.pour}. Étapes : ${t.etapes}. Ce que l'étude montre : ${t.preuve}. Source : ${t.source}`).join("\n")}
+${o.source ? `Source supplémentaire fournie : ${o.source}` : ""}
+Interdit : inventer un chiffre, une étude ou un pourcentage ; poser un diagnostic ; conseil médical dangereux. Si sujet de santé : une phrase invite à consulter un professionnel.
+
+RÉTENTION MAXIMALE (règles strictes) :
+- Plan 1 (moins de 2,5 s) : accroche qui crée un manque. Formules : douleur précise (« Tu te réveilles à 3 h du matin ? »), contre-intuitif (« Arrête de te dire de te calmer »), promesse chiffrée concrète (« 10 secondes pour… »). Jamais de bonjour ni de présentation.
+- Plan 2 : boucle ouverte (« la 2e étape, presque personne ne la fait »), refermée seulement à la fin.
+- 9 à 11 plans de 2,5 à 5 s : un changement visuel toutes les 3 à 5 secondes. Phrases de 12 mots maximum, tutoiement, une idée par plan.
+- Durée : 40 à 50 secondes, soit 100 à 120 mots AU TOTAL (compte-les).
+- Une rupture de rythme au milieu : un plan "bigword" OU "stamp".
+- Vers 35-45 % de la vidéo : appel à commenter UN mot ("cta").
+- La technique : étapes numérotées et concrètes ("count", "check" ou "timer"), puis la source sur un "card".
+- Avant-dernier plan : récap en "check" (2-3 points) ou "quote" (phrase à retenir).
+- Dernier plan : « Abonne-toi… » + une dernière phrase qui renvoie à la première (la vidéo boucle).
+
+CHAQUE PLAN :
+- "say" : texte dit (1 ou 2 phrases courtes).
+- "title" : titre à l'écran, 2 à 6 mots, accordé avec le texte dit (genre/nombre), neutre si possible. Titre du plan 1 = titre-accroche (miniature).
+- "img" : UNE pose du pack, qui illustre littéralement le plan ; varie (jamais 3 fois la même de suite) : ${Object.entries(PACK).map(([k, v]) => `${k} (${v})`).join(" ; ")}.
+  Si aucune pose ne convient (2 plans max) : ajoute "newimg" = description en anglais de la pose du même personnage (sans texte).
+- "gfx" (au moins 7 plans animés, jamais le même deux fois de suite) :
+  "ring" (anneau, idéal plan 1) · "pulse" (tension, battements de cœur) · "breath" (cercle de respiration ; "steps": 2-3 étiquettes en MAJUSCULES dont le dernier mot est prononcé) · "cta" ("cta": le mot à écrire) · "ecg" (cœur qui ralentit) · "card" ("card": {"b": "ce que l'étude montre en 8 mots max", "i": "la source exacte"}) · "count" ("count": nombre d'étapes) · "check" ("items": [{"t": "3-5 mots", "ok": true|false}] 2 ou 3) · "split" ("left": {"label": "MYTHE" ou "AVANT", "t": "4-7 mots"}, "right": {"label": "VÉRITÉ" ou "APRÈS", "t": "4-7 mots"}) · "quote" ("quote": phrase à retenir, 12 mots max) · "bigword" ("word": UN mot-choc prononcé dans le plan) · "stamp" ("stamp": "FAUX", "VRAI" ou "MYTHE", mot prononcé dans le plan) · "timer" ("seconds": 3 à 10, quand on demande de faire l'exercice maintenant) · "none".
+- "hot" : 1 à 3 mots exacts du "say" à colorer.
+MUSIQUE : choisis "music" parmi ${Object.entries(MUSICS).map(([k, v]) => `${k} = ${v}`).join(" ; ")}.${o.lang === "ar" ? " En arabe, préfère oriental ou calme." : ""}
+Réponds UNIQUEMENT en JSON : {"technique": "id", "title": "titre YouTube 60 caractères max", "hook": "texte écran 3 à 6 mots", "description": "2-3 phrases + question, sans hashtags", "hashtags": "5 hashtags", "ghost": "UN mot-thème en majuscules", "music": "calme", "plans": [{"say": "", "title": "", "img": "", "gfx": "", "hot": []}]}`;
 }
 function cleanPlans(arr) {
   return (arr || []).filter(p => p && String(p.say || "").trim()).slice(0, 12).map(p => {
     const o = { say: String(p.say).trim(), title: String(p.title || "").slice(0, 60), img: PACK[p.img] ? p.img : "standing",
-      gfx: ["ring", "pulse", "breath", "cta", "ecg", "card", "count", "none"].includes(p.gfx) ? p.gfx : "none", hot: (p.hot || []).map(String).slice(0, 4) };
+      gfx: ["ring", "pulse", "breath", "cta", "ecg", "card", "count", "check", "split", "quote", "bigword", "stamp", "timer", "none"].includes(p.gfx) ? p.gfx : "none", hot: (p.hot || []).map(String).slice(0, 4) };
+    if (o.gfx === "check") o.items = (p.items || []).slice(0, 3).map(x => ({ t: String(x?.t || "").slice(0, 40), ok: x?.ok !== false }));
+    if (o.gfx === "split") { o.left = { label: String(p.left?.label || "").slice(0, 14), t: String(p.left?.t || "").slice(0, 50) }; o.right = { label: String(p.right?.label || "").slice(0, 14), t: String(p.right?.t || "").slice(0, 50) }; }
+    if (o.gfx === "quote") o.quote = String(p.quote || "").slice(0, 90);
+    if (o.gfx === "bigword") o.word = String(p.word || "").slice(0, 14);
+    if (o.gfx === "stamp") o.stamp = String(p.stamp || "").slice(0, 10);
+    if (o.gfx === "timer") o.seconds = Math.max(3, Math.min(10, +p.seconds || 5));
     if (p.newimg) o.newimg = String(p.newimg).slice(0, 300);
     if (o.gfx === "breath") o.steps = (p.steps || []).map(String).slice(0, 3);
     if (o.gfx === "cta") o.cta = String(p.cta || "").slice(0, 20);
@@ -1018,7 +1048,7 @@ async function createR7(o) {
   const res = await api("create", { props: JSON.stringify({
     Name: { title: [{ text: { content: String(j.title || o.topic).slice(0, 200) } }] },
     Script: rt(plans.map(p => p.say).join("\n\n")), Description: rt(j.description), Hashtags: rt(j.hashtags), "Texte écran": rt(j.hook || plans[0].title),
-    "Scènes": rt(JSON.stringify({ style: "r7", ghost: String(j.ghost || "").slice(0, 20), music: j.music === "espoir" ? "espoir" : "calme", plans })), Production: { select: { name: "Visuels IA" } },
+    "Scènes": rt(JSON.stringify({ style: "r7", ghost: String(j.ghost || "").slice(0, 20), music: MUSICS[j.music] ? j.music : "calme", technique: String(j.technique || ""), plans })), Production: { select: { name: "Visuels IA" } },
     Type: { select: { name: "Short" } }, Language: { select: { name: lang } }, Channel: { select: { name: lang === "عربي" ? "Dr Fehmi AR" : "Fehmi Tlaies FR" } },
     "Pipeline Stage": { select: { name: "Script" } }, ...(o.link ? { "Source URL": { url: o.link } } : {})
   }) });
@@ -1080,11 +1110,29 @@ function openVoice(r) {
   $("#sheet").innerHTML = `<div class="sheet"><div>
     <h2 style="margin:0 0 4px" dir="auto">${esc(r.name)}</h2>
     <div class="small">Pièce calme, téléphone à 20 cm, mode avion. Une prise d'une traite : si tu rates une phrase, fais une pause et recommence-la, la dernière est gardée.</div>
-    <div style="margin:12px 0" dir="auto">${r.fx.plans.map((p, k) => `<div class="sayplan"><small>Plan ${k + 1} · ${esc(p.title)}</small>${esc(p.say)}</div>`).join("")}</div>
+    <div class="row" style="margin-top:10px"><div><label>Musique</label><select id="vMusic">${Object.entries(MUSICS).map(([k, v]) => `<option value="${k}" ${(r.fx.music || "calme") === k ? "selected" : ""}>${esc(v)}</option>`).join("")}<option value="none" ${r.fx.music === "none" ? "selected" : ""}>sans musique</option></select></div>
+      <div><label>Effets sonores</label><select id="vSfx"><option value="1">avec (recommandé)</option><option value="0" ${r.fx.sfx === false ? "selected" : ""}>sans</option></select></div></div>
+    <div style="margin:12px 0" dir="auto">${r.fx.plans.map((p, k) => `<div class="sayplan" style="display:flex;gap:10px;align-items:flex-start">
+      <img src="radar/pack/${esc(p.img)}.jpg" alt="" data-thumb="${k}" style="width:56px;height:56px;border-radius:10px;flex:none;object-fit:cover;${p.img_url || p.newimg ? "outline:2px solid #F2A541" : ""}">
+      <div style="flex:1;min-width:0"><small>Plan ${k + 1} · ${esc(p.title)}${p.gfx && p.gfx !== "none" ? " · ✨ " + esc(p.gfx) : ""}</small>${esc(p.say)}
+      <select data-pose="${k}" style="margin-top:6px;padding:6px 8px;font-size:13px">${p.newimg || p.img_url ? `<option value="__new" selected>image créée pour ce plan</option>` : ""}${Object.entries(PACK).map(([key, v]) => `<option value="${key}" ${!p.newimg && !p.img_url && p.img === key ? "selected" : ""}>${esc(v)}</option>`).join("")}</select></div></div>`).join("")}</div>
     <div class="row"><button class="ghost" id="vClone">🤖 Voix clonée (≈ ${money(chars * PRICE.tts)})</button><button class="pri" id="vRec">🎙 Ma voix</button></div>
     <button class="ghost" id="vClose" style="width:100%;margin-top:10px">Fermer</button>
   </div></div>`;
   $("#vClose").onclick = () => $("#sheet").innerHTML = "";
+  // choix enregistrés dans les plans : musique, effets sonores, pose de chaque plan
+  const keepChoices = () => {
+    r.fx.music = $("#vMusic").value; r.fx.sfx = $("#vSfx").value === "1";
+    api("update", { id: r.id, props: JSON.stringify({ "Scènes": rt(JSON.stringify(r.fx)) }) }).catch(() => {});
+  };
+  document.querySelectorAll("[data-pose]").forEach(sel => sel.onchange = () => {
+    const p = r.fx.plans[+sel.dataset.pose]; if (sel.value === "__new") return;
+    p.img = sel.value; delete p.newimg; delete p.img_url;
+    const im = document.querySelector(`[data-thumb="${sel.dataset.pose}"]`); im.src = `radar/pack/${sel.value}.jpg`; im.style.outline = "";
+  });
+  $("#vMusic").onchange = $("#vSfx").onchange = () => {};
+  $("#vRec").addEventListener("click", keepChoices, { capture: true });
+  $("#vClone").addEventListener("click", keepChoices, { capture: true });
   $("#vRec").onclick = () => { $("#sheet").innerHTML = ""; startShoot([r.id], store.get("plan", { mode: "now", time: "18:00" }), true); };
   $("#vClone").onclick = async () => {
     const b = $("#vClone"); b.disabled = true; b.textContent = "Voix clonée…";
@@ -1125,7 +1173,7 @@ async function renderR7(r, src) {
     if (changed) api("update", { id: r.id, props: JSON.stringify({ "Scènes": rt(JSON.stringify(r.fx)) }) }).catch(() => {});
     set(1, "ok", changed ? "Images (nouvelles poses créées)" : "Images du pack"); set(2, "run");
     const t = String(Math.floor(Date.now() / 1000));
-    const job = { lang: isAr(r) ? "ar" : "fr", ghost: r.fx.ghost || "", music: r.fx.music || "calme", voice, plans: plans.map(({ newimg, ...p }) => p) };
+    const job = { lang: isAr(r) ? "ar" : "fr", ghost: r.fx.ghost || "", music: r.fx.music || "calme", sfx: r.fx.sfx !== false, voice, plans: plans.map(({ newimg, ...p }) => p) };
     let res;
     try { res = await api("render", { id: r.id, t, ref: REF, job: b64(JSON.stringify(job)) }); }
     catch (e) { throw new Error(/refusé la demande/.test(e.message) ? "Montage pas encore activé : la clé GitHub n'est pas dans Make (voir la liste d'étapes)." : e.message); }
