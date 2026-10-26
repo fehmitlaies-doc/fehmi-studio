@@ -221,6 +221,7 @@ function row(p) {
     promo: !!pr["Promo app"]?.checkbox,
     hook: plain(pr["Texte écran"]?.rich_text),
     link: pr.Link?.url || "",
+    src: pr["Source URL"]?.url || "",
     cost: pr["Coût ($)"]?.number ?? null,
     fx: (() => { try { const j = JSON.parse(plain(pr["Scènes"]?.rich_text) || "null"); return j && ((Array.isArray(j.scenes) && j.scenes.length) || (j.style === "r7" && Array.isArray(j.plans) && j.plans.length)) ? j : null; } catch { return null; } })()
   };
@@ -274,6 +275,7 @@ $("#list").onclick = e => {
   const c = e.target.closest("[data-sel]"); if (c) { c.checked ? S.sel.add(c.dataset.sel) : S.sel.delete(c.dataset.sel); render(); return; }
   const g = e.target.closest("[data-one]"); if (g) openPlan([g.dataset.one]);
   const pb = e.target.closest("[data-pub]"); if (pb) { const r = S.rows.find(x => x.id === pb.dataset.pub); isR7(r) ? publishR7(r) : publishFx(r); return; }
+  const tr = e.target.closest("[data-tr]"); if (tr) { translateVideo(S.rows.find(x => x.id === tr.dataset.tr), tr); return; }
   const vo = e.target.closest("[data-voice]"); if (vo) { openVoice(S.rows.find(r => r.id === vo.dataset.voice)); return; }
   const rw = e.target.closest("[data-rwait]"); if (rw) { const r = S.rows.find(x => x.id === rw.dataset.rwait); if (r) watchRender(r, true); return; }
   const mk = e.target.closest("[data-make]"); if (mk) makeFaceless(S.rows.find(r => r.id === mk.dataset.make));
@@ -320,10 +322,11 @@ async function loadTrack() {
     const res = await api("recent");
     const items = (Array.isArray(res) ? res : []).map(p => {
       const pr = p.properties || {};
-      return { name: plain(pr.Name?.title) || "Sans titre", lang: pr.Language?.select?.name || "", st: pr["Statut publication"]?.select?.name || "",
+      return { r: row(p), name: plain(pr.Name?.title) || "Sans titre", lang: pr.Language?.select?.name || "", st: pr["Statut publication"]?.select?.name || "",
         stage: pr["Pipeline Stage"]?.select?.name || "", prod: pr.Production?.select?.name || "", cost: pr["Coût ($)"]?.number ?? null, date: pr["Publish Date"]?.date?.start || "",
         links: (plain(pr["Liens publiés"]?.rich_text) + " " + (pr["Published URL"]?.url || "")).match(/https?:\/\/\S+/g) || [], video: (pr.Link?.url || "").replace("www.dropbox.com", "dl.dropboxusercontent.com") };
     }).filter(i => S.lang === "all" || i.lang === S.lang);
+    S.track = items;
     el.innerHTML = !items.length ? `<div class="empty">Rien de programmé pour l'instant.</div>` : items.map(i => {
       const cls = i.st === "Publié" ? "ok" : i.st === "Erreur" ? "warn" : "";
       const d = i.date ? new Date(i.date).toLocaleString("fr-FR", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "";
@@ -331,10 +334,103 @@ async function loadTrack() {
         <div class="meta"><span class="pill">${i.lang === "عربي" ? "AR" : "FR"}</span><span class="pill ${cls}">${esc(i.st || i.stage)}</span>${i.prod ? `<span class="pill">${esc(i.prod)}</span>` : ""}${d ? `<span class="pill">${esc(d)}</span>` : ""}${i.cost != null ? `<span class="pill">💲 ${money(i.cost)}</span>` : ""}</div>
         ${i.video ? `<div class="vbox" data-v="${esc(i.video)}"><button class="ghost vplay">▶ Regarder${i.st === "Sous-titrage" ? " (sous-titres en cours…)" : ""}</button></div>` : ""}
         ${i.links.length ? `<div class="links small" style="margin-top:6px">${[...new Set(i.links)].map(u => `<a href="${esc(u)}" target="_blank" rel="noopener">${/tiktok/.test(u) ? "TikTok" : /youtu/.test(u) ? "YouTube" : "lien"}</a>`).join("")}</div>` : ""}
+        <div class="row" style="margin-top:8px">${editable(i) ? `<button class="ghost" data-pedit="${i.r.id}">✎ Modifier</button>` : `<span class="small" style="align-self:center">En ligne : TikTok et YouTube ne permettent plus de changer le texte d'ici.</span>`}${trButton(i.r)}</div>
       </div></div>`;
     }).join("") + `<div class="small" style="text-align:center;margin-top:10px">« En attente » part à l'heure prévue (vérifié toutes les 15 min) · « Envoyé » = en cours chez TikTok/YouTube · liens ajoutés automatiquement.</div>`;
   } catch (e) { el.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
 }
+// Avant publication, le texte et l'heure restent modifiables ; une fois parti chez TikTok/YouTube, plus possible
+const editable = i => i.stage === "Scheduled" && ["En attente", "Sous-titrage", "Erreur", ""].includes(i.st);
+$("#track").addEventListener("click", e => {
+  const ed = e.target.closest("[data-pedit]"); if (ed) { openPostEdit(S.track.find(i => i.r.id === ed.dataset.pedit)); return; }
+  const tr = e.target.closest("[data-tr]"); if (tr) translateVideo(S.track.find(i => i.r.id === tr.dataset.tr)?.r, tr);
+});
+function openPostEdit(i) {
+  if (!i) return;
+  const r = i.r, local = i.date ? new Date(new Date(i.date).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : "";
+  $("#sheet").innerHTML = `<div class="sheet"><div>
+    <h2 style="margin:0 0 4px">Modifier la publication</h2>
+    <div class="small">Écrit automatiquement par Claude : change ce que tu veux avant l'envoi.</div>
+    <label>Titre (YouTube)</label><input id="pTitle" dir="auto" maxlength="95" value="${esc(r.name)}">
+    <label>Description</label><textarea id="pDesc" rows="5" dir="auto">${esc(r.desc)}</textarea>
+    <label>Hashtags</label><input id="pTags" dir="auto" value="${esc(r.tags)}">
+    <label>Date et heure de publication</label><input id="pDate" type="datetime-local" value="${local}">
+    <button class="ghost" id="pGen" style="width:100%;margin-top:12px">✨ Claude réécrit description et hashtags</button>
+    <div class="row" style="margin-top:12px"><button class="ghost" id="pClose">Fermer</button><button class="pri" id="pSave">Enregistrer</button></div>
+  </div></div>`;
+  $("#pClose").onclick = () => $("#sheet").innerHTML = "";
+  $("#pGen").onclick = async () => {
+    const b = $("#pGen"); b.disabled = true; b.textContent = "Claude écrit…";
+    try {
+      const j = parseJSON((await api("gen", { prompt: metaPrompt({ ...r, name: $("#pTitle").value, desc: "", tags: "" }) })).text);
+      if (!j?.description) throw new Error("réponse incomplète, réessaie");
+      $("#pDesc").value = String(j.description).slice(0, 1800); $("#pTags").value = String(j.hashtags || "").slice(0, 400);
+    } catch (e) { toast(e.message); }
+    b.disabled = false; b.textContent = "✨ Claude réécrit description et hashtags";
+  };
+  $("#pSave").onclick = async () => {
+    const d = $("#pDate").value ? new Date($("#pDate").value) : null;
+    if (d && isNaN(d)) return toast("Date invalide");
+    const props = { Name: { title: [{ text: { content: $("#pTitle").value.trim().slice(0, 200) || r.name } }] }, Description: rt($("#pDesc").value.trim()), Hashtags: rt($("#pTags").value.trim()) };
+    if (d) props["Publish Date"] = { date: { start: d.toISOString() } };
+    if (i.st === "Erreur") props["Statut publication"] = { select: { name: "En attente" } };
+    const b = $("#pSave"); b.disabled = true; b.textContent = "Enregistrement…";
+    try { await api("update", { id: r.id, props: JSON.stringify(props) }); $("#sheet").innerHTML = ""; toast(i.st === "Erreur" ? "Enregistré : nouvel essai d'envoi au prochain passage." : "Enregistré."); loadTrack(); }
+    catch (e) { b.disabled = false; b.textContent = "Enregistrer"; toast(e.message); }
+  };
+}
+
+/* ---------- même vidéo dans l'autre langue (sur demande), programmée sur la chaîne de cette langue ---------- */
+const otherLang = r => isAr(r) ? "Francais" : "عربي";
+const trDone = store.get("tr", {});
+const trButton = r => !r || (!r.fx && r.script.length < 20) ? "" : trDone[r.id] ? `<span class="pill ok" style="align-self:center">✓ version ${isAr(r) ? "FR" : "AR"} créée</span>` : `<button class="ghost" data-tr="${r.id}">🌐 Créer en ${isAr(r) ? "français" : "arabe"}</button>`;
+function trPrompt(r, data) {
+  const to = isAr(r) ? "français parlé, tutoiement, phrases courtes" : "arabe tunisien (darija) naturel et clair, compréhensible dans tout le monde arabe";
+  return `Tu adaptes une vidéo courte du Dr Fehmi (médecin, santé mentale) dans une autre langue : ${to}.
+Adaptation naturelle, pas du mot à mot : même sens, même structure, même ton, même nombre d'éléments. Ce qui est dit doit sonner comme écrit directement dans cette langue.
+Ne change JAMAIS : les sources (champ "i" des cartes, noms d'auteurs, revues, années), les chiffres, les valeurs de "img", "img_url", "gfx", "count", "seconds", "ok".
+Dans chaque plan, "hot" = 1 à 3 mots EXACTS du nouveau "say" ; "word", "stamp" et le dernier mot de "steps" doivent être prononcés dans le "say" du plan.
+Concision (rétention) : 85 à 100 mots AU TOTAL pour l'ensemble des "say" (compte-les) ; raccourcis chaque phrase si besoin, sans perdre l'accroche, les étapes de la technique ni la source. 12 mots maximum par phrase.
+Titre YouTube 60 caractères max, hashtags adaptés à la langue (5 à 8), description 2-3 phrases + une question.
+Contenu à adapter (JSON) :
+${JSON.stringify(data)}
+Réponds UNIQUEMENT avec le même JSON adapté (mêmes clés).`;
+}
+async function translateVideo(r, btn) {
+  if (!r) return;
+  const to = otherLang(r), lab = to === "عربي" ? "arabe" : "français";
+  if (!confirm(`Créer la version ${lab} de « ${r.name} » ?\nClaude l'adapte (≈ 1 min), puis elle arrive dans 🎬 Tourner : tu enregistres la voix (ou voix clonée) et elle sera programmée sur la chaîne ${to === "عربي" ? "arabe" : "française"}.`)) return;
+  const old = btn.textContent; btn.disabled = true; btn.textContent = "Claude adapte…";
+  try {
+    const base = { title: r.name, hook: r.hook, description: r.desc, hashtags: r.tags };
+    const data = r.fx?.style === "r7" ? { ...base, plans: r.fx.plans } : { ...base, script: r.script };
+    let j = null;
+    for (let k = 0; k < 2 && !j; k++) {
+      j = parseJSON((await api("gen", { prompt: trPrompt(r, data) })).text);
+      if (r.fx?.style === "r7" && cleanPlans(j?.plans).length < 4) j = null;
+      if (j && !r.fx && String(j.script || "").length < 20) j = null;
+    }
+    if (!j) throw new Error("Claude n'a pas rendu une adaptation complète, réessaie dans une minute.");
+    const props = {
+      Name: { title: [{ text: { content: String(j.title || r.name).slice(0, 200) } }] }, Description: rt(j.description), Hashtags: rt(j.hashtags), "Texte écran": rt(j.hook),
+      Type: { select: { name: r.type || "Short" } }, Language: { select: { name: to } }, Channel: { select: { name: to === "عربي" ? "Dr Fehmi AR" : "Fehmi Tlaies FR" } },
+      "Pipeline Stage": { select: { name: "Script" } }, "Promo app": { checkbox: !!r.promo }, ...(r.src ? { "Source URL": { url: r.src } } : {})
+    };
+    if (r.fx?.style === "r7") {
+      // textes adaptés, mais images, animations et sources gardées à l'identique
+      const plans = cleanPlans(j.plans.map((p, k) => { const o = r.fx.plans[k] || {}; return { ...p, img: o.img || p.img, gfx: o.gfx || p.gfx, ...(o.img_url ? { img_url: o.img_url } : {}), ...(o.card ? { card: { b: p.card?.b || o.card.b, i: o.card.i } } : {}) }; }));
+      props.Script = rt(plans.map(p => p.say).join("\n\n"));
+      props["Scènes"] = rt(JSON.stringify({ ...r.fx, plans }));
+      props.Production = { select: { name: "Visuels IA" } };
+    } else props.Script = rt(j.script);
+    await api("create", { props: JSON.stringify(props) });
+    trDone[r.id] = 1; store.set("tr", trDone);
+    btn.outerHTML = `<span class="pill ok" style="align-self:center">✓ version ${lab === "arabe" ? "AR" : "FR"} créée</span>`;
+    toast(`Version ${lab} créée : elle est dans 🎬 Tourner.`, 5000);
+    if (S.tab === "shoot") load();
+  } catch (e) { btn.disabled = false; btn.textContent = old; toast(e.message, 6000); }
+}
+
 // Lien Dropbox lisible dans un lecteur vidéo (iPhone) : domaine direct + affichage en ligne
 const streamUrl = u => String(u || "").replace("www.dropbox.com", "dl.dropboxusercontent.com").replace(/([?&])dl=[01]/, "$1raw=1");
 // Lecture dans le Studio : le lecteur ne se charge qu'au toucher pour ne pas télécharger toutes les vidéos
@@ -1071,7 +1167,7 @@ function r7Card(r) {
       <div class="meta"><span class="pill">${isAr(r) ? "AR" : "FR"}</span><span class="pill">${r.fx.plans.length} plans</span><span class="pill">ambre</span>
       ${wait ? `<span class="pill warn">⏳ montage en cours</span>` : r.link ? `<span class="pill ok">vidéo prête</span>` : `<span class="pill warn">voix à enregistrer</span>`}${r.cost != null ? `<span class="pill">💲 ${money(r.cost)}</span>` : ""}</div></div>
     ${wait ? `<button class="go" data-rwait="${r.id}" aria-label="Voir l'avancement du montage">⏳</button>` : `<button class="go" data-voice="${r.id}" aria-label="${r.link ? "Refaire" : "Enregistrer"} la voix">🎙</button>`}</div>
-    ${r.link ? `<div class="vbox" data-v="${esc(r.link)}" style="margin:-4px 0 12px"><div class="row"><button class="ghost vplay">▶ Regarder</button><button class="pri" data-pub="${r.id}">🚀 Publier</button></div></div>` : ""}`;
+    ${r.link ? `<div class="vbox" data-v="${esc(r.link)}" style="margin:-4px 0 12px"><div class="row"><button class="ghost vplay">▶ Regarder</button><button class="pri" data-pub="${r.id}">🚀 Publier</button></div></div><div class="row" style="margin:-4px 0 12px">${trButton(r)}</div>` : ""}`;
 }
 
 /* ---------- onglet Radar : idées détectées → versions A/B → script ---------- */
