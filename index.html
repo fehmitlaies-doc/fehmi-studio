@@ -1043,11 +1043,14 @@ function cleanPlans(arr) {
   });
 }
 // Claude écrit les plans puis la vidéo arrive dans « À tourner » (procédure habituelle du Studio)
-async function createR7(o) {
+async function createR7(o, tries = 2) {
   const out = await api("gen", { prompt: r7Prompt(o) });
   const j = parseJSON(out.text);
   const plans = cleanPlans(j?.plans);
-  if (plans.length < 4) throw new Error("plans illisibles, réessaie");
+  if (plans.length < 4) {
+    if (tries > 1) { toast("Réponse de Claude incomplète, nouvel essai…", 5000); return createR7(o, tries - 1); }
+    throw new Error("Claude n'a pas rendu un script complet deux fois de suite. Réessaie dans une minute.");
+  }
   const lang = o.lang === "ar" ? "عربي" : "Francais";
   const res = await api("create", { props: JSON.stringify({
     Name: { title: [{ text: { content: String(j.title || o.topic).slice(0, 200) } }] },
