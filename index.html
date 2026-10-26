@@ -335,12 +335,15 @@ async function loadTrack() {
     }).join("") + `<div class="small" style="text-align:center;margin-top:10px">« En attente » part à l'heure prévue (vérifié toutes les 15 min) · « Envoyé » = en cours chez TikTok/YouTube · liens ajoutés automatiquement.</div>`;
   } catch (e) { el.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
 }
+// Lien Dropbox lisible dans un lecteur vidéo (iPhone) : domaine direct + affichage en ligne
+const streamUrl = u => String(u || "").replace("www.dropbox.com", "dl.dropboxusercontent.com").replace(/([?&])dl=[01]/, "$1raw=1");
 // Lecture dans le Studio : le lecteur ne se charge qu'au toucher pour ne pas télécharger toutes les vidéos
 const playInline = e => {
   const box = e.target.closest(".vbox"); if (!e.target.closest(".vplay") || !box) return;
-  document.querySelectorAll("#track video").forEach(v => v.pause());
-  box.innerHTML = `<video controls playsinline autoplay preload="auto" src="${esc(box.dataset.v)}"></video>
-    <div class="links small"><a href="${esc(box.dataset.v)}" target="_blank" rel="noopener">⤓ Ouvrir / enregistrer</a></div>${box.querySelector("[data-pub]") ? box.querySelector("[data-pub]").outerHTML : ""}`;
+  document.querySelectorAll("#track video, #list video").forEach(v => v.pause());
+  const src = streamUrl(box.dataset.v);
+  box.innerHTML = `<video controls playsinline autoplay preload="auto" src="${esc(src)}#t=0.1"></video>
+    <div class="links small"><a href="${esc(src)}" target="_blank" rel="noopener">⤓ Ouvrir / enregistrer</a></div>${box.querySelector("[data-pub]") ? box.querySelector("[data-pub]").outerHTML : ""}`;
 };
 $("#track").addEventListener("click", playInline);
 $("#list").addEventListener("click", playInline);
@@ -1221,7 +1224,7 @@ async function watchRender(r, show) {
         job.done = true; rx.set(r.id, job); render();
         if ($("#fx").classList.contains("on") && $("#fxTitle").textContent === r.name) {
           fxSteps([["Voix", "ok"], ["Images", "ok"], [`Montage — coût ${money(job.cost)}`, "ok"]]);
-          const v = $("#fxv"); v.src = l.url.replace("www.dropbox.com", "dl.dropboxusercontent.com"); v.style.display = "block";
+          const v = $("#fxv"); v.src = streamUrl(l.url); v.style.display = "block";
           fxButtons(`<button class="ghost" id="fxRedo">↺ Refaire la voix</button><button class="pri" id="fxKeep">✓ Publier</button>`, {
             fxRedo: () => { closeFx(); openVoice(r); }, fxKeep: async () => { closeFx(); await publishR7(r); } });
         } else toast("Vidéo prête : " + r.name, 5000);
