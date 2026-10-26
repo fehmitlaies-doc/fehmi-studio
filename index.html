@@ -120,6 +120,7 @@ h1{font-size:22px;margin:0}
 
 <div class="bar">
   <button class="ghost" id="bNew">＋ Scripts</button>
+  <button class="ghost" id="bDel" hidden style="flex:none">🗑 0</button>
   <button class="pri" id="bShoot" disabled>Tourner (0)</button>
 </div>
 
@@ -173,7 +174,7 @@ h1{font-size:22px;margin:0}
 <script>
 const API = "https://hook.eu1.make.com/0jj57vomxlae4srwpwj6m74kdrkk24p2";
 // Mise à jour automatique : l'iPhone garde l'ancienne page en cache ; on compare avec la version en ligne et on recharge
-const BUILD = "2026-10-26.4";
+const BUILD = "2026-10-26.5";
 async function checkUpdate() {
   try {
     const t = await (await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" })).text();
@@ -281,6 +282,7 @@ function render() {
       ${r.fx && r.link ? `<div class="vbox" data-v="${esc(r.link)}" style="margin:-4px 0 12px"><div class="row"><button class="ghost vplay">▶ Regarder</button><button class="pri" data-pub="${r.id}">🚀 Publier</button></div></div>` : ""}`).join("");
   const n = S.sel.size;
   $("#bShoot").textContent = `Tourner (${n})`; $("#bShoot").disabled = !n;
+  $("#bDel").hidden = !n; $("#bDel").textContent = `🗑 ${n}`;
   renderQueue();
 }
 $("#langSeg").onclick = e => { const l = e.target.dataset.l; if (!l) return; S.lang = l; store.set("lang", l); render(); };
@@ -295,6 +297,26 @@ $("#list").onclick = e => {
   const ed = e.target.closest("[data-edit]"); if (ed) openEdit(S.rows.find(r => r.id === ed.dataset.edit));
 };
 $("#bShoot").onclick = () => openPlan(S.rows.filter(r => S.sel.has(r.id)).map(r => r.id));
+$("#bDel").onclick = () => removeRows([...S.sel]);
+
+/* ---------- supprimer des vidéos (doublons, sujets abandonnés) : rangées dans Notion sous « Supprimé », récupérables ---------- */
+async function removeRows(ids) {
+  const rows = S.rows.filter(r => ids.includes(r.id)); if (!rows.length) return;
+  if (!confirm(rows.length === 1 ? `Supprimer « ${rows[0].name} » de la liste ?` : `Supprimer ces ${rows.length} vidéos de la liste ?`)) return;
+  const setStage = (r, name) => api("update", { id: r.id, props: JSON.stringify({ "Pipeline Stage": { select: { name } } }) });
+  const done = [];
+  for (const r of rows) { try { await setStage(r, "Supprimé"); done.push(r); } catch (e) { toast(e.message); } }
+  if (!done.length) return;
+  S.rows = S.rows.filter(r => !done.includes(r)); done.forEach(r => S.sel.delete(r.id)); $("#sheet").innerHTML = ""; render();
+  const t = $("#toast"); clearTimeout(toast.t);
+  t.innerHTML = `${done.length === 1 ? "Vidéo supprimée" : done.length + " vidéos supprimées"} <button class="ghost" id="tUndo" style="margin-left:8px;padding:6px 12px;width:auto;color:#F2A541;font-weight:700;border:1px solid #F2A541;border-radius:10px">Annuler</button>`; t.hidden = false;
+  toast.t = setTimeout(() => t.hidden = true, 7000);
+  $("#tUndo").onclick = async () => {
+    t.hidden = true;
+    for (const r of done) { try { await setStage(r, "Script"); } catch {} }
+    load(); toast("Remis dans la liste.");
+  };
+}
 
 /* ---------- modifier un script ---------- */
 function openEdit(r) {
@@ -307,8 +329,10 @@ function openEdit(r) {
     <label>Hashtags</label><input id="eTags" dir="auto" value="${esc(r.tags)}" placeholder="Vide = Claude les choisit">
     <label style="display:flex;gap:8px;align-items:center;color:var(--txt)"><input type="checkbox" id="ePromo" style="width:auto" ${r.promo ? "checked" : ""}> Promo de l'app Vague (« Votre marque »)</label>
     <div class="row" style="margin-top:18px"><button class="ghost" id="eCancel">Fermer</button><button class="pri" id="eSave">Enregistrer</button></div>
+    <button class="ghost" id="eDel" style="width:100%;margin-top:10px;color:#ff8a80">🗑 Supprimer cette vidéo</button>
   </div></div>`;
   $("#eCancel").onclick = () => $("#sheet").innerHTML = "";
+  $("#eDel").onclick = () => removeRows([r.id]);
   $("#eSave").onclick = async () => {
     const v = { script: $("#eScript").value.trim(), desc: $("#eDesc").value.trim(), tags: $("#eTags").value.trim(), promo: $("#ePromo").checked, hook: $("#eHook").value.trim() };
     const b = $("#eSave"); b.disabled = true; b.textContent = "Enregistrement…";
