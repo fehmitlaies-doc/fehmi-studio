@@ -174,7 +174,7 @@ h1{font-size:22px;margin:0}
 <script>
 const API = "https://hook.eu1.make.com/0jj57vomxlae4srwpwj6m74kdrkk24p2";
 // Mise à jour automatique : l'iPhone garde l'ancienne page en cache ; on compare avec la version en ligne et on recharge
-const BUILD = "2026-10-26.8";
+const BUILD = "2026-10-26.9";
 async function checkUpdate() {
   try {
     const t = await (await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" })).text();
@@ -373,7 +373,10 @@ async function loadTrack() {
         ${i.links.length ? `<div class="links small" style="margin-top:6px">${[...new Set(i.links)].map(u => `<a href="${esc(u)}" target="_blank" rel="noopener">${/tiktok/.test(u) ? "TikTok" : /youtu/.test(u) ? "YouTube" : "lien"}</a>`).join("")}</div>` : ""}
         <div class="row" style="margin-top:8px">${editable(i) ? `<button class="ghost" data-pedit="${i.r.id}">✎ Modifier</button>` : `<span class="small" style="align-self:center">En ligne : TikTok et YouTube ne permettent plus de changer le texte d'ici.</span>`}${trButton(i.r)}</div>
       </div></div>`;
-    }).join("") + `<div class="small" style="text-align:center;margin-top:10px">« En attente » part à l'heure prévue (vérifié toutes les 30 min) · « Envoyé » = en cours chez TikTok/YouTube · liens directs vers les vidéos ajoutés automatiquement (≈ 30 min après l'envoi).</div>`;
+    }).join("") + `<div class="small" style="text-align:center;margin-top:10px">« En attente » part à l'heure prévue (vérifié toutes les 30 min) · « Envoyé » = en cours chez TikTok/YouTube · liens directs vers les vidéos ajoutés automatiquement (≈ 30 min après l'envoi).</div>
+`;
+    el.insertAdjacentHTML("beforeend", `<button class="ghost" id="bOther" style="width:100%;margin-top:14px">💻 Ouvrir le Studio sur un autre appareil</button>`);
+    $("#bOther").onclick = shareStudio;
   } catch (e) { el.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
 }
 // Avant publication, le texte et l'heure restent modifiables ; une fois parti chez TikTok/YouTube, plus possible
@@ -466,6 +469,14 @@ async function translateVideo(r, btn) {
     toast(`Version ${lab} créée : elle est dans 🎬 Tourner.`, 5000);
     if (S.tab === "shoot") load();
   } catch (e) { btn.disabled = false; btn.textContent = old; toast(e.message, 6000); }
+}
+
+// Lien personnel du Studio (avec la clé) : partagé par le menu du téléphone (AirDrop, mail à soi-même…) ou copié
+async function shareStudio() {
+  const url = location.origin + location.pathname + "#k=" + KEY;
+  try { if (navigator.share) { await navigator.share({ title: "Fehmi Studio", url }); return; } } catch (e) { if (e.name === "AbortError") return; }
+  try { await navigator.clipboard.writeText(url); toast("Lien copié : colle-le dans le navigateur de ton PC. Garde-le pour toi, il donne accès au Studio.", 6000); }
+  catch { prompt("Copie ce lien et ouvre-le sur ton PC (garde-le pour toi) :", url); }
 }
 
 // Lien Dropbox lisible dans un lecteur vidéo (iPhone) : domaine direct + affichage en ligne
