@@ -172,6 +172,19 @@ h1{font-size:22px;margin:0}
 
 <script>
 const API = "https://hook.eu1.make.com/0jj57vomxlae4srwpwj6m74kdrkk24p2";
+// Mise à jour automatique : l'iPhone garde l'ancienne page en cache ; on compare avec la version en ligne et on recharge
+const BUILD = "2026-10-26.4";
+async function checkUpdate() {
+  try {
+    const t = await (await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" })).text();
+    const live = (t.match(/const BUILD = "([^"]+)"/) || [])[1];
+    if (!live || live === BUILD || sessionStorage.getItem("upd") === live) return;
+    sessionStorage.setItem("upd", live);
+    const u = new URL(location.href); u.searchParams.set("v", live); location.replace(u.toString());
+  } catch {}
+}
+checkUpdate();
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkUpdate(); });
 const VIDEO_TYPES = ["Short", "Video", "Video Long", "TikTok", "Youtube"];
 const MAX_BYTES = 150 * 1024 * 1024;           // limite d'un lien d'envoi Dropbox
 const $ = s => document.querySelector(s);
