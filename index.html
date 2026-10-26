@@ -174,7 +174,7 @@ h1{font-size:22px;margin:0}
 <script>
 const API = "https://hook.eu1.make.com/0jj57vomxlae4srwpwj6m74kdrkk24p2";
 // Mise à jour automatique : l'iPhone garde l'ancienne page en cache ; on compare avec la version en ligne et on recharge
-const BUILD = "2026-10-26.5";
+const BUILD = "2026-10-26.6";
 async function checkUpdate() {
   try {
     const t = await (await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" })).text();
@@ -373,7 +373,7 @@ async function loadTrack() {
         ${i.links.length ? `<div class="links small" style="margin-top:6px">${[...new Set(i.links)].map(u => `<a href="${esc(u)}" target="_blank" rel="noopener">${/tiktok/.test(u) ? "TikTok" : /youtu/.test(u) ? "YouTube" : "lien"}</a>`).join("")}</div>` : ""}
         <div class="row" style="margin-top:8px">${editable(i) ? `<button class="ghost" data-pedit="${i.r.id}">✎ Modifier</button>` : `<span class="small" style="align-self:center">En ligne : TikTok et YouTube ne permettent plus de changer le texte d'ici.</span>`}${trButton(i.r)}</div>
       </div></div>`;
-    }).join("") + `<div class="small" style="text-align:center;margin-top:10px">« En attente » part à l'heure prévue (vérifié toutes les 15 min) · « Envoyé » = en cours chez TikTok/YouTube · liens ajoutés automatiquement.</div>`;
+    }).join("") + `<div class="small" style="text-align:center;margin-top:10px">« En attente » part à l'heure prévue (vérifié toutes les 15 min) · « Envoyé » = en cours chez TikTok/YouTube · liens directs vers les vidéos ajoutés automatiquement (≈ 15 min après l'envoi).</div>`;
   } catch (e) { el.innerHTML = `<div class="err">${esc(e.message)}</div>`; }
 }
 // Avant publication, le texte et l'heure restent modifiables ; une fois parti chez TikTok/YouTube, plus possible
