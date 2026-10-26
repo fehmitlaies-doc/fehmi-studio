@@ -142,7 +142,8 @@ css = f'''
 @font-face{{font-family:"Cairo";src:url("assets/Cairo-la.ttf") format("truetype");unicode-range:U+0000-024F,U+2000-206F,U+20AC}}
 body{{margin:0;width:{W}px;height:{HT}px;overflow:hidden;background:#17121C}}
 #root{{position:relative;width:{W}px;height:{HT}px;background:#17121C;overflow:hidden;font-family:"{CF}",sans-serif}}
-.ghost{{position:absolute;top:760px;left:0;white-space:nowrap;font-family:"{TF}";font-weight:800;font-size:520px;line-height:1;color:#F6EEE3;opacity:.04}}
+.dust{{position:absolute;border-radius:50%;background:radial-gradient(circle,rgba(242,165,65,.55),rgba(242,165,65,.12) 45%,rgba(242,165,65,0) 70%)}}
+.vign{{position:absolute;inset:0;background:radial-gradient(ellipse 75% 60% at 50% 45%,rgba(23,18,28,0) 55%,rgba(10,7,12,.75) 100%)}}
 .halo{{position:absolute;left:140px;top:470px;width:800px;height:800px;border-radius:50%;background:radial-gradient(circle,rgba(242,165,65,.30),rgba(242,165,65,.10) 40%,rgba(242,165,65,0) 68%)}}
 .sig{{position:absolute;top:120px;left:110px;right:110px;text-align:center;font-family:"Archivo","Cairo";font-weight:800;font-size:30px;letter-spacing:4px;text-transform:uppercase;color:#A89AA6}}
 .ttl{{position:absolute;top:190px;left:110px;right:110px;text-align:center;direction:{DIR};font-family:"{TF}";font-weight:800;font-size:{74 if AR else 78}px;line-height:{1.25 if AR else 1.05};color:#F6EEE3;opacity:0}}
@@ -175,15 +176,22 @@ body{{margin:0;width:{W}px;height:{HT}px;overflow:hidden;background:#17121C}}
 .timer{{position:absolute;left:440px;top:1040px;width:200px;height:200px;opacity:0}}
 .timer span{{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:"Fraunces";font-weight:800;font-size:96px;color:#F6EEE3}}
 '''
-ghost = H.escape((' · '.join([job.get('ghost') or 'RESPIRE'] * 3)))
+# fond : poussières de lumière ambrée qui montent lentement (positions fixes, pas de hasard au rendu)
+import random
+RND = random.Random(7)
+dust = []
+for k in range(16):
+    size = RND.choice([10, 14, 18, 26, 40, 60])
+    dust.append((k, RND.randint(40, W - 60), RND.randint(300, HT - 100), size, RND.uniform(.25, .7), RND.randint(160, 420), RND.uniform(6, 11)))
 h = [f'<!DOCTYPE html><html lang="{"ar" if AR else "fr"}"><head><meta charset="UTF-8"><script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script><style>{css}</style></head><body>',
      f'<div id="root" data-composition-id="main" data-width="{W}" data-height="{HT}" data-start="0" data-duration="{END:.2f}">',
      '<!-- audio : ajouté après le mixage -->',
-     f'<div class="ghost" id="ghost" data-layout-ignore>{ghost}</div><div class="halo" id="halo" data-layout-ignore></div>',
+     ''.join(f'<div class="dust" id="du{k}" data-layout-ignore style="left:{x}px;top:{y}px;width:{sz}px;height:{sz}px;opacity:{op:.2f}"></div>' for k, x, y, sz, op, _, _ in dust),
+     '<div class="vign" data-layout-ignore></div><div class="halo" id="halo" data-layout-ignore></div>',
      '<div id="prog"></div>',
      f'<div class="sig" id="sig">{"د. فهمي · علم النفس" if AR else "Dr Fehmi · Psychologie"}</div>']
 js = ['window.__timelines=window.__timelines||{};var tl=gsap.timeline({paused:true});',
-      f'tl.fromTo("#ghost",{{x:{-2600 if AR else 0}}},{{x:{0 if AR else -2600},duration:{END:.2f},ease:"none"}},0);',
+      *[f'tl.fromTo("#du{k}",{{y:0}},{{y:-{rise},duration:{END:.2f},ease:"none"}},0);tl.to("#du{k}",{{x:{RND.choice([-1, 1]) * RND.randint(14, 36)},duration:{per:.2f},ease:"sine.inOut",yoyo:true,repeat:{int(END / per)}}},0);' for k, x, y, sz, op, rise, per in dust],
       f'tl.fromTo("#halo",{{scale:.92,opacity:.75}},{{scale:1.08,opacity:1,duration:2.2,ease:"sine.inOut",yoyo:true,repeat:{int(END / 2.2)}}},0);',
       'tl.from("#sig",{y:-20,opacity:0,duration:.6,ease:"power2.out"},0.1);',
       f'tl.fromTo("#prog",{{scaleX:0}},{{scaleX:1,duration:{END:.2f},ease:"none"}},0);']
