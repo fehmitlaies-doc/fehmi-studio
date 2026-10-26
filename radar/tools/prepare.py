@@ -15,7 +15,7 @@ def get(url, dest):
 # voix : mono 48 kHz, volume harmonisé (la voix elle-même n'est pas modifiée)
 get(job['voice'], f'{D}/assets/voice.src')
 subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', f'{D}/assets/voice.src', '-vn', '-ac', '1', '-ar', '48000',
-                '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11', '-c:a', 'aac', '-b:a', '192k', f'{D}/assets/voice.m4a'], check=True)
+                '-af', f"atempo={min(1.35, max(1.0, float(job.get('speed') or 1))):.2f},loudnorm=I=-16:TP=-1.5:LRA=11", '-c:a', 'aac', '-b:a', '192k', f'{D}/assets/voice.m4a'], check=True)
 
 names = {f[:-4] for f in os.listdir(PACK) if f.endswith('.jpg')}
 for i, p in enumerate(job['plans']):

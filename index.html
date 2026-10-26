@@ -1009,7 +1009,7 @@ RÉTENTION MAXIMALE (règles strictes) :
 - Plan 1 (moins de 2,5 s) : accroche qui crée un manque. Formules : douleur précise (« Tu te réveilles à 3 h du matin ? »), contre-intuitif (« Arrête de te dire de te calmer »), promesse chiffrée concrète (« 10 secondes pour… »). Jamais de bonjour ni de présentation.
 - Plan 2 : boucle ouverte (« la 2e étape, presque personne ne la fait »), refermée seulement à la fin.
 - 9 à 11 plans de 2,5 à 5 s : un changement visuel toutes les 3 à 5 secondes. Phrases de 12 mots maximum, tutoiement, une idée par plan.
-- Durée : 40 à 50 secondes, soit 100 à 120 mots AU TOTAL (compte-les).
+- Durée : 40 à 50 secondes une fois montée, soit 85 à 100 mots AU TOTAL (compte-les). Chaque mot doit servir : pas de remplissage.
 - Une rupture de rythme au milieu : un plan "bigword" OU "stamp".
 - Vers 35-45 % de la vidéo : appel à commenter UN mot ("cta").
 - La technique : étapes numérotées et concrètes ("count", "check" ou "timer"), puis la source sur un "card".
@@ -1122,6 +1122,7 @@ function openVoice(r) {
     <div class="small">Pièce calme, téléphone à 20 cm, mode avion. Une prise d'une traite : si tu rates une phrase, fais une pause et recommence-la, la dernière est gardée.</div>
     <div class="row" style="margin-top:10px"><div><label>Musique</label><select id="vMusic">${Object.entries(MUSICS).map(([k, v]) => `<option value="${k}" ${(r.fx.music || "calme") === k ? "selected" : ""}>${esc(v)}</option>`).join("")}<option value="none" ${r.fx.music === "none" ? "selected" : ""}>sans musique</option></select></div>
       <div><label>Effets sonores</label><select id="vSfx"><option value="1">avec (recommandé)</option><option value="0" ${r.fx.sfx === false ? "selected" : ""}>sans</option></select></div></div>
+    <div class="row" style="margin-top:10px"><div><label>Rythme de la voix au montage (sans changer le timbre)</label><select id="vSpeed">${[[1, "naturel"], [1.1, "+10 %"], [1.2, "+20 % (recommandé)"], [1.3, "+30 %"]].map(([v, l]) => `<option value="${v}" ${(r.fx.speed || 1.2) === v ? "selected" : ""}>${l}</option>`).join("")}</select></div></div>
     <div style="margin:12px 0" dir="auto">${r.fx.plans.map((p, k) => `<div class="sayplan" style="display:flex;gap:10px;align-items:flex-start">
       <img src="radar/pack/${esc(p.img)}.jpg" alt="" data-thumb="${k}" style="width:56px;height:56px;border-radius:10px;flex:none;object-fit:cover;${p.img_url || p.newimg ? "outline:2px solid #F2A541" : ""}">
       <div style="flex:1;min-width:0"><small>Plan ${k + 1} · ${esc(p.title)}${p.gfx && p.gfx !== "none" ? " · ✨ " + esc(p.gfx) : ""}</small>${esc(p.say)}
@@ -1132,7 +1133,7 @@ function openVoice(r) {
   $("#vClose").onclick = () => $("#sheet").innerHTML = "";
   // choix enregistrés dans les plans : musique, effets sonores, pose de chaque plan
   const keepChoices = () => {
-    r.fx.music = $("#vMusic").value; r.fx.sfx = $("#vSfx").value === "1";
+    r.fx.music = $("#vMusic").value; r.fx.sfx = $("#vSfx").value === "1"; r.fx.speed = +$("#vSpeed").value;
     api("update", { id: r.id, props: JSON.stringify({ "Scènes": rt(JSON.stringify(r.fx)) }) }).catch(() => {});
   };
   document.querySelectorAll("[data-pose]").forEach(sel => sel.onchange = () => {
@@ -1183,7 +1184,7 @@ async function renderR7(r, src) {
     if (changed) api("update", { id: r.id, props: JSON.stringify({ "Scènes": rt(JSON.stringify(r.fx)) }) }).catch(() => {});
     set(1, "ok", changed ? "Images (nouvelles poses créées)" : "Images du pack"); set(2, "run");
     const t = String(Math.floor(Date.now() / 1000));
-    const job = { lang: isAr(r) ? "ar" : "fr", ghost: r.fx.ghost || "", music: r.fx.music || "calme", sfx: r.fx.sfx !== false, voice, plans: plans.map(({ newimg, ...p }) => p) };
+    const job = { lang: isAr(r) ? "ar" : "fr", ghost: r.fx.ghost || "", music: r.fx.music || "calme", sfx: r.fx.sfx !== false, speed: r.fx.speed || 1.2, voice, plans: plans.map(({ newimg, ...p }) => p) };
     let res;
     try { res = await api("render", { id: r.id, t, ref: REF, job: b64(JSON.stringify(job)) }); }
     catch (e) { throw new Error(/refusé la demande/.test(e.message) ? "Montage pas encore activé : la clé GitHub n'est pas dans Make (voir la liste d'étapes)." : e.message); }

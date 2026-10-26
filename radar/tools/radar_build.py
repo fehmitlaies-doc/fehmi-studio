@@ -87,10 +87,10 @@ for i, w in enumerate(words):  # mots non reconnus : entre leurs voisins
         nxt = next((words[j]['s'] for j in range(i + 1, len(words)) if 's' in words[j]), src_dur)
         w['s'], w['e'] = prev, min(nxt, prev + 0.3)
 
-# longs silences ramenés à 0,6 s (la voix elle-même n'est jamais modifiée)
+# silences de plus de 0,55 s ramenés à 0,3 s : rythme serré, meilleure rétention
 for a, b in zip(words, words[1:]):
-    if b['s'] - a['e'] > 1.1 and not any(c0 <= a['e'] < c1 for c0, c1 in cuts):
-        cuts.append((a['e'] + 0.3, b['s'] - 0.3))
+    if b['s'] - a['e'] > 0.55 and not any(c0 <= a['e'] < c1 for c0, c1 in cuts):
+        cuts.append((a['e'] + 0.15, b['s'] - 0.15))
 lead = max(0, words[0]['s'] - 0.25)
 if lead > 0.05: cuts.append((0, lead))
 cuts = sorted((max(0, a), min(src_dur, b)) for a, b in cuts if b - a > 0.08)
@@ -145,7 +145,6 @@ body{{margin:0;width:{W}px;height:{HT}px;overflow:hidden;background:#17121C}}
 .dust{{position:absolute;border-radius:50%;background:radial-gradient(circle,rgba(242,165,65,.55),rgba(242,165,65,.12) 45%,rgba(242,165,65,0) 70%)}}
 .vign{{position:absolute;inset:0;background:radial-gradient(ellipse 75% 60% at 50% 45%,rgba(23,18,28,0) 55%,rgba(10,7,12,.75) 100%)}}
 .halo{{position:absolute;left:140px;top:470px;width:800px;height:800px;border-radius:50%;background:radial-gradient(circle,rgba(242,165,65,.30),rgba(242,165,65,.10) 40%,rgba(242,165,65,0) 68%)}}
-.sig{{position:absolute;top:120px;left:110px;right:110px;text-align:center;font-family:"Archivo","Cairo";font-weight:800;font-size:30px;letter-spacing:4px;text-transform:uppercase;color:#A89AA6}}
 .ttl{{position:absolute;top:190px;left:110px;right:110px;text-align:center;direction:{DIR};font-family:"{TF}";font-weight:800;font-size:{74 if AR else 78}px;line-height:{1.25 if AR else 1.05};color:#F6EEE3;opacity:0}}
 .ill{{position:absolute;left:150px;top:440px;width:780px;height:780px;opacity:0}}
 .ill img{{width:100%;height:100%;object-fit:cover;display:block;-webkit-mask-image:radial-gradient(circle,#000 52%,transparent 71%);mask-image:radial-gradient(circle,#000 52%,transparent 71%)}}
@@ -188,12 +187,10 @@ h = [f'<!DOCTYPE html><html lang="{"ar" if AR else "fr"}"><head><meta charset="U
      '<!-- audio : ajouté après le mixage -->',
      ''.join(f'<div class="dust" id="du{k}" data-layout-ignore style="left:{x}px;top:{y}px;width:{sz}px;height:{sz}px;opacity:{op:.2f}"></div>' for k, x, y, sz, op, _, _ in dust),
      '<div class="vign" data-layout-ignore></div><div class="halo" id="halo" data-layout-ignore></div>',
-     '<div id="prog"></div>',
-     f'<div class="sig" id="sig">{"د. فهمي · علم النفس" if AR else "Dr Fehmi · Psychologie"}</div>']
+     '<div id="prog"></div>']
 js = ['window.__timelines=window.__timelines||{};var tl=gsap.timeline({paused:true});',
       *[f'tl.fromTo("#du{k}",{{y:0}},{{y:-{rise},duration:{END:.2f},ease:"none"}},0);tl.to("#du{k}",{{x:{RND.choice([-1, 1]) * RND.randint(14, 36)},duration:{per:.2f},ease:"sine.inOut",yoyo:true,repeat:{int(END / per)}}},0);' for k, x, y, sz, op, rise, per in dust],
       f'tl.fromTo("#halo",{{scale:.92,opacity:.75}},{{scale:1.08,opacity:1,duration:2.2,ease:"sine.inOut",yoyo:true,repeat:{int(END / 2.2)}}},0);',
-      'tl.from("#sig",{y:-20,opacity:0,duration:.6,ease:"power2.out"},0.1);',
       f'tl.fromTo("#prog",{{scaleX:0}},{{scaleX:1,duration:{END:.2f},ease:"none"}},0);']
 
 for i, p in enumerate(plans):
@@ -323,14 +320,18 @@ for gi, gr in enumerate(groups):
     if e0 - s0 < .12: continue  # minutage incohérent : on ne montre pas ce sous-titre plutôt que de le laisser figé
     js.append(f'tl.fromTo("#c{gi}",{{opacity:0,y:16}},{{opacity:1,y:0,duration:.18,ease:"power2.out"}},{s0:.2f});tl.set("#c{gi}",{{opacity:0}},{e0:.2f});')
 
-# mixage : voix + musique (−20 dB, fondus) + effets sonores aux instants des animations
+# mixage : voix + musique (bien présente, baissée automatiquement quand la voix parle) + effets sonores
 music = job.get('music') or 'calme'
 audio_src, audio_dur = 'voice_final.m4a', dur
-ins, flt, lab = ['-i', f'{D}/assets/voice_final.m4a'], [f'[0:a]apad=whole_dur={END:.2f}[v]'], ['[v]']
+ins, flt, lab = ['-i', f'{D}/assets/voice_final.m4a'], [f'[0:a]apad=whole_dur={END:.2f}[v0]'], ['[v]']
 mf = f'{D}/assets/music_{music}.m4a'
 if music != 'none' and os.path.exists(mf):
     ins += ['-stream_loop', '-1', '-i', mf]
-    flt.append(f'[1:a]volume=-20dB,atrim=0:{END:.2f},afade=t=in:d=1.5,afade=t=out:st={END - 2:.2f}:d=2[m]'); lab.append('[m]')
+    flt.append('[v0]asplit=2[v][vk]')
+    flt.append(f'[1:a]volume=-12dB,atrim=0:{END:.2f},afade=t=in:d=1,afade=t=out:st={END - 2:.2f}:d=2[m0]')
+    flt.append('[m0][vk]sidechaincompress=threshold=0.04:ratio=5:attack=20:release=400:makeup=1[m]'); lab.append('[m]')
+else:
+    flt[0] = flt[0].replace('[v0]', '[v]')
 if sfx_on:
     last = {}
     for name, t, gain in sorted(SFX, key=lambda x: x[1]):
