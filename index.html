@@ -174,7 +174,7 @@ h1{font-size:22px;margin:0}
 <script>
 const API = "https://hook.eu1.make.com/0jj57vomxlae4srwpwj6m74kdrkk24p2";
 // Mise à jour automatique : l'iPhone garde l'ancienne page en cache ; on compare avec la version en ligne et on recharge
-const BUILD = "2026-10-28.1";
+const BUILD = "2026-10-28.2";
 async function checkUpdate() {
   try {
     const t = await (await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" })).text();
@@ -783,7 +783,8 @@ function parseJSON(t) {
 function metaPrompt(r) {
   return `Tu écris le texte de publication TikTok/YouTube Shorts d'une vidéo face caméra du Dr Fehmi (médecin, santé mentale, arrêt du tabac, IA en santé).
 Langue : ${isAr(r) ? "arabe (darija tunisienne compréhensible, ou arabe simple)" : "français"}.
-${r.promo ? "La vidéo promeut son app « Vague » pour arrêter de fumer : mentionne-la naturellement." : ""}
+${r.promo ? "La vidéo promeut son app (Vague pour le tabac, Sursaut pour le temps d'écran, selon le sujet) : mentionne-la naturellement, « sur l'App Store », sans lien ni promesse." : ""}
+Référencement : la 1re phrase contient le mot-clé que les gens tapent sur ce sujet (de préférence une expression précise de longue traîne) ; hashtags = 1 ou 2 larges + le mot-clé + des hashtags précis, jamais seulement #fyp.
 Titre : ${r.name}
 Script : ${r.script.slice(0, 3000)}
 Réponds UNIQUEMENT en JSON : {"description": "2 à 3 phrases accrocheuses + une question pour les commentaires, sans hashtags", "hashtags": "5 à 8 hashtags pertinents séparés par des espaces"}`;
@@ -794,11 +795,28 @@ function scriptsPrompt(o) {
 Langue : ${o.lang === "عربي" ? "arabe (darija tunisienne naturelle, facile à lire au prompteur)" : "français parlé, phrases courtes"}.
 Durée cible : ${o.sec} secondes à l'oral (~${Math.round(o.sec * 2.5)} mots).
 ${RETENTION}
-${o.promo ? "Mentionne naturellement son app « Vague » pour arrêter de fumer." : "Pas de promotion."}
+${o.promo ? appRules(o.app || "Vague") : "Pas de promotion."}
+${seoRules(o)}
 Pas d'indications de mise en scène, pas d'emojis : seulement le texte à dire, avec des retours à la ligne pour respirer.
 Ne donne pas de conseil médical dangereux ; reste factuel et prudent.
 Réponds UNIQUEMENT en JSON : [{"title": "titre YouTube accrocheur, 60 caractères max", "hook": "texte écran 3 à 6 mots", "script": "...", "description": "2-3 phrases + question, sans hashtags", "hashtags": "5 à 8 hashtags"}]`;
 }
+// Référencement YouTube / TikTok / Shorts : mot-clé de longue traîne prononcé, écrit et répété aux bons endroits
+function seoRules(o) {
+  const ar = o.lang === "ar" || o.lang === "عربي", kw = (o.kw || []).filter(Boolean);
+  return `RÉFÉRENCEMENT (recherche YouTube, TikTok et Shorts) :
+- ${kw.length ? `Mot-clé principal : « ${kw[0]} »${kw.length > 1 ? ` ; secondaires : ${kw.slice(1, 5).map(k => `« ${k} »`).join(", ")}` : ""}.` : "Choisis toi-même le mot-clé principal : la phrase précise que les gens tapent vraiment sur ce sujet."}
+- Vise la longue traîne : une expression précise de 2 à 6 mots (« que faire quand… », « pourquoi… », « différence entre… »), moins concurrencée que le terme large, qui reste en secondaire.
+- Titre : commence par le mot-clé, puis deux-points et une phrase précise qui touche (modèle qui se classe bien : « Anxiété : pourquoi ton cerveau imagine toujours le pire »). 60 caractères max, honnête, sans promesse exagérée.
+- Le mot-clé principal est PRONONCÉ dans les 5 premières secondes (TikTok et YouTube transcrivent la voix pour la recherche) et figure dans le texte écran quand c'est naturel.
+- Description : la 1re phrase contient le mot-clé principal ; 2 ou 3 secondaires placés naturellement ; pas de bourrage de mots-clés.
+- Hashtags (5 à 8) : 1 ou 2 larges (${ar ? "#الصحة_النفسية #علم_النفس" : "#santémentale #psychologie"}), le mot-clé principal en hashtag, puis des hashtags précis du sujet. Jamais seulement #fyp ou #viral.`;
+}
+const APPS = {
+  Vague: "app iPhone d'aide à l'arrêt du tabac : SOS gratuit et sans limite pour laisser passer l'envie de fumer (3 à 5 minutes) ; le plan et le programme coûtent 59,99 €/an après 7 jours d'essai. Ce n'est pas un dispositif médical : aucune promesse de guérison ni de sevrage.",
+  Sursaut: "app iPhone contre le scroll automatique : un bouclier apparaît avant d'ouvrir une app choisie, avec une pause respiration de 60 secondes ; 29,99 €/an après 7 jours d'essai. Une minute pour choisir, pas une interdiction ; pas de promesse de résultat."
+};
+const appRules = app => `Mentionne naturellement l'app « ${app} » du Dr Fehmi : ${APPS[app]} Règles : rien de faux (ni faux témoignage, ni chiffre d'utilisateurs, ni « résultats garantis »), prix exacts et jamais « 100 % gratuit », pas de lien dans la vidéo : dire « ${app} sur l'App Store » (le lien est dans la bio). #MoisSansTabac possible sans laisser croire à un partenariat avec Santé publique France.`;
 const RETENTION = `Techniques de rétention à appliquer :
 - 0–2 s : la 1re phrase est l'accroche. Pas de « Bonjour », pas de présentation. Utilise une rupture : affirmation contre-intuitive, erreur fréquente (« Arrête de… »), chiffre précis, question qui touche une douleur, ou promesse concrète.
 - Boucle ouverte : annonce tôt ce qui vient (« le 3e point est celui que personne ne fait ») et ne la referme qu'à la fin.
@@ -813,6 +831,34 @@ Règles : 3 à 6 mots, dans la langue du script, crée un manque de curiosité o
 ${rows.map(r => `ID ${r.id} | ${isAr(r) ? "arabe" : "français"} | Titre : ${r.name}\nDébut du script : ${r.script.slice(0, 500)}`).join("\n---\n")}
 Réponds UNIQUEMENT en JSON : {"<ID>": "texte écran", ...}`;
 }
+/* ---------- banque d'idées prêtes (ideas.json) : catégories, longue traîne, ⭐ = mot-clé facile à classer ---------- */
+let IDEAS = null;
+async function toggleIdeas() {
+  const box = $("#gIdeaBox"); if (!box.hidden) { box.hidden = true; return; }
+  box.hidden = false; box.innerHTML = `<div class="small" style="margin:8px 0">Chargement des idées…</div>`;
+  try { IDEAS = IDEAS || await (await fetch("ideas.json?v=" + BUILD)).json(); } catch { box.innerHTML = `<div class="err">Idées indisponibles, réessaie.</div>`; return; }
+  let cat = store.get("ideaCat", ""), q = "";
+  const draw = () => {
+    const lang = $("#gLang").value === "عربي" ? "ar" : "fr", cats = IDEAS.cats.filter(c => c.l === lang);
+    if (!cats.some(c => c.id === cat)) cat = cats[0].id;
+    const list = IDEAS.ideas.filter(i => q ? cats.some(c => c.id === i.c) && (i.t + " " + (i.k || "")).toLowerCase().includes(q.toLowerCase()) : i.c === cat);
+    box.innerHTML = `<div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0">${cats.map(c => `<button class="ghost${c.id === cat && !q ? " on" : ""}" data-icat="${c.id}" style="width:auto;padding:6px 10px;font-size:13px">${esc(c.n)}</button>`).join("")}</div>
+      <input id="gIq" placeholder="Chercher une idée…" dir="auto" value="${esc(q)}">
+      <div style="max-height:46vh;overflow:auto;margin-top:8px">${list.map(i => `<button class="ghost" data-idea="${IDEAS.ideas.indexOf(i)}" dir="auto" style="display:block;width:100%;text-align:start;margin:6px 0;padding:10px 12px">${i.e ? "⭐ " : ""}${esc(i.t)}<div class="small" style="margin-top:4px">🔎 ${esc(i.k || IDEAS.cats.find(c => c.id === i.c).kw[0])}</div></button>`).join("") || `<div class="small">Aucune idée trouvée.</div>`}</div>
+      <div class="small" style="margin-top:6px">⭐ = mot-clé mesuré avec peu de concurrence (plus facile à classer). ${esc(IDEAS.source)}</div>`;
+    box.querySelectorAll("[data-icat]").forEach(b => b.onclick = () => { cat = b.dataset.icat; q = ""; store.set("ideaCat", cat); draw(); });
+    $("#gIq").oninput = e => { q = e.target.value; const pos = e.target.selectionStart; draw(); const n = $("#gIq"); n.focus(); n.setSelectionRange(pos, pos); };
+    box.querySelectorAll("[data-idea]").forEach(b => b.onclick = () => {
+      const i = IDEAS.ideas[+b.dataset.idea], c = IDEAS.cats.find(x => x.id === i.c);
+      $("#gTopic").value = i.t;
+      $("#gKw").value = [...new Set([i.k, ...c.kw].filter(Boolean))].slice(0, 5).join(", ");
+      if (c.app) { $("#gPromo").checked = true; $("#gApp").value = c.app; }
+      box.hidden = true; toast("Idée choisie : ajuste si besoin, puis « Écrire ».");
+    });
+  };
+  $("#gLang").addEventListener("change", () => { if (!box.hidden) draw(); });
+  draw();
+}
 $("#bNew").onclick = () => {
   const o = store.get("gen", { topic: "", lang: "Francais", n: 3, sec: 45, promo: false });
   $("#sheet").innerHTML = `<div class="sheet"><div>
@@ -821,22 +867,28 @@ $("#bNew").onclick = () => {
     <label>Format</label>
     <div class="seg" id="gMode" style="width:100%"><button data-m="cam" style="flex:1">🎥 Face caméra</button><button data-m="fx" style="flex:1">🎞 Sans visage</button></div>
     <div id="gStyleBox" hidden><div class="small" style="margin-top:8px">Style ambre : ta voix (enregistrée avec 🎙, ou ta voix clonée) · personnage du pack · animations · sous-titres incrustés · étiquette IA cochée.</div></div>
+    <button class="ghost" id="gIdeas" style="width:100%;margin-top:12px">💡 Idées prêtes (Vague, Sursaut, santé mentale FR / AR)</button>
+    <div id="gIdeaBox" hidden></div>
     <label>Sujet ou idée</label><textarea id="gTopic" rows="3" dir="auto" placeholder="ex. 3 mythes sur la nicotine">${esc(o.topic)}</textarea>
+    <label>Mots-clés à viser (le 1er = principal, idéalement une expression précise)</label><input id="gKw" dir="auto" value="${esc((o.kw || []).join(", "))}" placeholder="Vide = Claude choisit le mot-clé le plus recherché">
     <div class="row"><div><label>Langue</label><select id="gLang"><option value="Francais">Français</option><option value="عربي">عربي</option></select></div>
       <div><label>Combien</label><select id="gN">${[1, 2, 3, 4, 5].map(n => `<option>${n}</option>`).join("")}</select></div>
       <div><label>Durée</label><select id="gSec"><option value="30">30 s</option><option value="45">45 s</option><option value="60">60 s</option><option value="90">90 s</option></select></div></div>
-    <label style="display:flex;gap:8px;align-items:center;color:var(--txt)"><input type="checkbox" id="gPromo" style="width:auto"> Promo de l'app Vague (coche « Votre marque »)</label>
+    <label style="display:flex;gap:8px;align-items:center;color:var(--txt)"><input type="checkbox" id="gPromo" style="width:auto"> Promo de mon app <select id="gApp" style="width:auto;padding:4px 8px;margin-left:4px"><option>Vague</option><option>Sursaut</option></select> (coche « Votre marque »)</label>
     <div class="row" style="margin-top:18px"><button class="ghost" id="gCancel">Annuler</button><button class="pri" id="gGo">Écrire</button></div>
     <div id="gOut"></div>
   </div></div>`;
   $("#gLang").value = o.lang; $("#gN").value = o.n; $("#gSec").value = o.sec; $("#gPromo").checked = o.promo;
+  $("#gApp").value = o.app || "Vague";
+  $("#gIdeas").onclick = () => toggleIdeas();
   let mode = o.mode || "cam";
   const setMode = m => { mode = m; document.querySelectorAll("#gMode button").forEach(b => b.classList.toggle("on", b.dataset.m === m)); $("#gStyleBox").hidden = m !== "fx"; $("#gSec").disabled = m === "fx"; };
   $("#gMode").onclick = e => { const m = e.target.closest("[data-m]")?.dataset.m; if (m) setMode(m); };
   setMode(mode);
   $("#gCancel").onclick = () => $("#sheet").innerHTML = "";
   $("#gGo").onclick = async () => {
-    const opt = { topic: $("#gTopic").value.trim(), lang: $("#gLang").value, n: +$("#gN").value, sec: +$("#gSec").value, promo: $("#gPromo").checked, mode };
+    const opt = { topic: $("#gTopic").value.trim(), lang: $("#gLang").value, n: +$("#gN").value, sec: +$("#gSec").value, promo: $("#gPromo").checked, app: $("#gApp").value, mode,
+      kw: $("#gKw").value.split(/[,،]/).map(k => k.trim()).filter(Boolean).slice(0, 6) };
     if (mode === "fx") opt.n = Math.min(opt.n, 3);
     if (!opt.topic) { toast("Écris un sujet."); return; }
     store.set("gen", opt);
@@ -844,7 +896,7 @@ $("#bNew").onclick = () => {
     if (mode === "fx") {
       try {
         const lang = opt.lang === "عربي" ? "ar" : "fr";
-        await pool(Array.from({ length: opt.n }, (_, k) => k), 3, k => createR7({ topic: opt.n > 1 ? `${opt.topic} (angle n° ${k + 1} sur ${opt.n}, différent des autres)` : opt.topic, lang }));
+        await pool(Array.from({ length: opt.n }, (_, k) => k), 3, k => createR7({ topic: opt.n > 1 ? `${opt.topic} (angle n° ${k + 1} sur ${opt.n}, différent des autres)` : opt.topic, lang, kw: opt.kw, promo: opt.promo, app: opt.app }));
         $("#sheet").innerHTML = ""; toast(`${opt.n} vidéo${opt.n > 1 ? "s" : ""} au style ambre : appuie sur 🎙 pour enregistrer ta voix.`, 5000); load();
       } catch (e) { btn.disabled = false; btn.textContent = "Écrire"; $("#gOut").innerHTML = `<div class="err">${esc(e.message)}</div>`; }
       return;
@@ -1103,7 +1155,8 @@ ${RETENTION}
 Découpe en ${Math.max(6, Math.round(o.sec / 5.5))} à ${Math.round(o.sec / 4.5)} scènes.
 ${SCENE_RULES}
 La 1re scène porte l'accroche et doit avoir l'image la plus intrigante. Rien de choquant.
-${o.promo ? "Mentionne naturellement son app « Vague » pour arrêter de fumer." : "Pas de promotion."}
+${o.promo ? appRules(o.app || "Vague") : "Pas de promotion."}
+${seoRules(o)}
 Ne donne pas de conseil médical dangereux ; reste factuel et prudent.
 Réponds UNIQUEMENT en JSON : [{"title": "titre YouTube 60 caractères max", "hook": "texte écran 3 à 6 mots", "description": "2-3 phrases + question, sans hashtags", "hashtags": "5 à 8 hashtags", "character": "recurring character description in english", "scenes": [{"text": "voix off", "image": "english literal visual", "motion": "english camera/subject motion"}]}]`;
 }
@@ -1203,6 +1256,7 @@ function r7Prompt(o) {
 Sujet : ${o.topic}
 ${o.version ? `Version retenue (à suivre fidèlement, avec tes propres mots) : ${o.version}` : ""}
 Langue de la voix off : ${o.lang === "ar" ? "arabe tunisien (darija) naturel et clair, compréhensible dans tout le monde arabe" : "français parlé, tutoiement, phrases courtes"}.
+${o.promo ? appRules(o.app || "Vague") + "\n" : ""}${seoRules(o)}
 
 TECHNIQUES PROUVÉES (choisis LA plus adaptée au sujet, explique-la précisément, étapes concrètes ; cite uniquement sa source, telle quelle) :
 ${TECHNIQUES.map(t => `- [${t.id}] ${t.nom} — pour : ${t.pour}. Étapes : ${t.etapes}. Ce que l'étude montre : ${t.preuve}. Source : ${t.source}`).join("\n")}
@@ -1264,7 +1318,7 @@ async function createR7(o, tries = 2) {
     Script: rt(plans.map(p => p.say).join("\n\n")), Description: rt(j.description), Hashtags: rt(j.hashtags), "Texte écran": rt(j.hook || plans[0].title),
     "Scènes": rt(JSON.stringify({ style: "r7", ghost: String(j.ghost || "").slice(0, 20), music: MUSICS[j.music] ? j.music : "calme", technique: String(j.technique || ""), plans })), Production: { select: { name: "Visuels IA" } },
     Type: { select: { name: "Short" } }, Language: { select: { name: lang } }, Channel: { select: { name: lang === "عربي" ? "Dr Fehmi AR" : "Fehmi Tlaies FR" } },
-    "Pipeline Stage": { select: { name: "Script" } }, ...(o.link ? { "Source URL": { url: o.link } } : {})
+    "Pipeline Stage": { select: { name: "Script" } }, "Promo app": { checkbox: !!o.promo }, ...(o.link ? { "Source URL": { url: o.link } } : {})
   }) });
   return res.id;
 }
