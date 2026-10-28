@@ -174,7 +174,7 @@ h1{font-size:22px;margin:0}
 <script>
 const API = "https://hook.eu1.make.com/0jj57vomxlae4srwpwj6m74kdrkk24p2";
 // Mise à jour automatique : l'iPhone garde l'ancienne page en cache ; on compare avec la version en ligne et on recharge
-const BUILD = "2026-10-26.9";
+const BUILD = "2026-10-28.1";
 async function checkUpdate() {
   try {
     const t = await (await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" })).text();
@@ -237,7 +237,7 @@ function row(p) {
     link: pr.Link?.url || "",
     src: pr["Source URL"]?.url || "",
     cost: pr["Coût ($)"]?.number ?? null,
-    fx: (() => { try { const j = JSON.parse(plain(pr["Scènes"]?.rich_text) || "null"); return j && ((Array.isArray(j.scenes) && j.scenes.length) || (j.style === "r7" && Array.isArray(j.plans) && j.plans.length)) ? j : null; } catch { return null; } })()
+    fx: (() => { try { const j = JSON.parse(plain(pr["Scènes"]?.rich_text) || "null"); return j && ((Array.isArray(j.scenes) && j.scenes.length) || ((j.style === "r7" || j.style === "ecran") && Array.isArray(j.plans) && j.plans.length)) ? j : null; } catch { return null; } })()
   };
 }
 async function load() {
@@ -271,7 +271,7 @@ function render() {
   const rows = S.rows.filter(r => S.lang === "all" || r.lang === S.lang);
   $("#list").innerHTML = S.loading ? `<div class="empty">Chargement des scripts…</div>` :
     !rows.length ? `<div class="empty">Aucun script à tourner. Appuie sur « ＋ Scripts ».</div>` :
-    rows.map(r => isR7(r) ? r7Card(r) : `<div class="card">
+    rows.map(r => isEcran(r) ? ecranCard(r) : isR7(r) ? r7Card(r) : `<div class="card">
       ${r.fx ? `<span style="width:24px;flex:none;text-align:center" aria-hidden="true">🎞</span>` : `<input type="checkbox" data-sel="${r.id}" ${S.sel.has(r.id) ? "checked" : ""} aria-label="Ajouter au tournage">`}
       <div class="b"><div class="t" dir="auto" data-edit="${r.id}">${esc(r.name)} <span class="small">✎</span></div>
         <div class="meta"><span class="pill">${isAr(r) ? "AR" : r.lang === "Francais" ? "FR" : esc(r.lang || "?")}</span>
@@ -291,6 +291,7 @@ $("#list").onclick = e => {
   const g = e.target.closest("[data-one]"); if (g) openPlan([g.dataset.one]);
   const pb = e.target.closest("[data-pub]"); if (pb) { const r = S.rows.find(x => x.id === pb.dataset.pub); isR7(r) ? publishR7(r) : publishFx(r); return; }
   const tr = e.target.closest("[data-tr]"); if (tr) { translateVideo(S.rows.find(x => x.id === tr.dataset.tr), tr); return; }
+  const ec = e.target.closest("[data-ecran]"); if (ec) { openEcran(S.rows.find(x => x.id === ec.dataset.ecran)); return; }
   const vo = e.target.closest("[data-voice]"); if (vo) { openVoice(S.rows.find(r => r.id === vo.dataset.voice)); return; }
   const rw = e.target.closest("[data-rwait]"); if (rw) { const r = S.rows.find(x => x.id === rw.dataset.rwait); if (r) watchRender(r, true); return; }
   const mk = e.target.closest("[data-make]"); if (mk) makeFaceless(S.rows.find(r => r.id === mk.dataset.make));
@@ -423,7 +424,7 @@ function openPostEdit(i) {
 /* ---------- même vidéo dans l'autre langue (sur demande), programmée sur la chaîne de cette langue ---------- */
 const otherLang = r => isAr(r) ? "Francais" : "عربي";
 const trDone = store.get("tr", {});
-const trButton = r => !r || (!r.fx && r.script.length < 20) ? "" : trDone[r.id] ? `<span class="pill ok" style="align-self:center">✓ version ${isAr(r) ? "FR" : "AR"} créée</span>` : `<button class="ghost" data-tr="${r.id}">🌐 Créer en ${isAr(r) ? "français" : "arabe"}</button>`;
+const trButton = r => !r || isEcran(r) || (!r.fx && r.script.length < 20) ? "" : trDone[r.id] ? `<span class="pill ok" style="align-self:center">✓ version ${isAr(r) ? "FR" : "AR"} créée</span>` : `<button class="ghost" data-tr="${r.id}">🌐 Créer en ${isAr(r) ? "français" : "arabe"}</button>`;
 function trPrompt(r, data) {
   const to = isAr(r) ? "français parlé, tutoiement, phrases courtes" : "arabe tunisien (darija) naturel et clair, compréhensible dans tout le monde arabe";
   return `Tu adaptes une vidéo courte du Dr Fehmi (médecin, santé mentale) dans une autre langue : ${to}.
@@ -1136,6 +1137,65 @@ const MUSICS = { calme: "calme (piano doux)", espoir: "espoir (lumineux)", tensi
 const TECHNIQUES = [{"id": "soupir", "nom": "Soupir physiologique (double inspiration, longue expiration)", "pour": "colère, stress, anxiété aiguë", "etapes": "2 inspirations par le nez (la 2e courte), puis longue expiration par la bouche ; 1 à 5 minutes", "preuve": "5 min/jour pendant 1 mois amélioraient davantage l'humeur que la méditation de pleine conscience", "source": "Balban et al., Cell Reports Medicine, 2023", "pmid": "36630953"}, {"id": "liste", "nom": "Liste de demain avant de dormir", "pour": "pensées le soir, endormissement", "etapes": "5 minutes avant le coucher, écrire les tâches de demain, sur papier", "preuve": "écrire sa liste de tâches faisait s'endormir plus vite qu'écrire ce qu'on a déjà fait", "source": "Scullin et al., J Exp Psychol Gen, 2018", "pmid": "29058942"}, {"id": "surf", "nom": "Surfer l'envie (urge surfing)", "pour": "envie de fumer, de grignoter, de scroller", "etapes": "observer l'envie dans le corps, la nommer, respirer, la laisser monter puis redescendre sans agir", "preuve": "des fumeurs formés à observer l'envie fumaient moins ensuite", "source": "Bowen & Marlatt, Psychol Addict Behav, 2009", "pmid": "20025372"}, {"id": "report", "nom": "Report des inquiétudes (temps d'inquiétude)", "pour": "rumination, anxiété, inquiétudes", "etapes": "noter l'inquiétude, la reporter à un créneau fixe de 15-20 min dans la journée, y penser seulement à ce moment-là", "preuve": "essai randomisé : le report des inquiétudes réduisait l'inquiétude", "source": "Krzikalla et al., Clin Psychol Eur, 2024", "pmid": "39119056"}, {"id": "nommer", "nom": "Nommer l'émotion (affect labeling)", "pour": "émotions intenses, colère, peur", "etapes": "mettre un mot précis sur ce qu'on ressent : « je ressens de la colère »", "preuve": "mettre des mots sur ses émotions diminuait l'activité de l'amygdale", "source": "Lieberman et al., Psychol Sci, 2007", "pmid": "17576282"}, {"id": "activation", "nom": "Activation comportementale", "pour": "déprime, manque d'envie, procrastination", "etapes": "planifier chaque jour 1 petite activité agréable ou utile, la faire même sans envie, noter l'humeur avant/après", "preuve": "efficace contre la dépression (revue Cochrane)", "source": "Uphoff et al., Cochrane, 2020", "pmid": "32628293"}, {"id": "exercice", "nom": "Bouger (marche, course, yoga, musculation)", "pour": "déprime, stress", "etapes": "marche rapide ou autre activité régulière, intensité adaptée", "preuve": "l'exercice réduisait la dépression ; plus l'intensité est élevée, plus l'effet est net", "source": "Noetel et al., BMJ, 2024", "pmid": "38355154"}, {"id": "mbct", "nom": "Pleine conscience (MBCT)", "pour": "prévenir la rechute dépressive, rumination", "etapes": "exercices réguliers d'attention au présent (respiration, scan corporel), accompagnés", "preuve": "la MBCT réduisait le risque de rechute dépressive", "source": "Kuyken et al., JAMA Psychiatry, 2016", "pmid": "27119968"}, {"id": "tcc_anxiete", "nom": "TCC et exposition progressive", "pour": "anxiété, phobies, évitement", "etapes": "faire face petit à petit à ce qu'on évite, en commençant par le plus facile, sans fuir", "preuve": "la TCC était efficace contre placebo pour les troubles anxieux", "source": "Carpenter et al., Depress Anxiety, 2018", "pmid": "29451967"}, {"id": "tcci", "nom": "Lit = sommeil (TCC de l'insomnie)", "pour": "insomnie", "etapes": "se lever si on ne dort pas après ~20 min, ne pas rester au lit éveillé, horaires de lever fixes", "preuve": "la TCC de l'insomnie réduisait le temps d'endormissement d'environ 20 minutes", "source": "Trauer et al., Ann Intern Med, 2015", "pmid": "26054060"}, {"id": "ecriture", "nom": "Écriture expressive", "pour": "choc émotionnel, stress, émotions retenues", "etapes": "écrire 15-20 min sur ce qu'on ressent profondément, 3-4 jours de suite", "preuve": "un effet positif, modeste, sur la santé", "source": "Frattaroli, Psychol Bull, 2006", "pmid": "17073523"}, {"id": "act", "nom": "Prendre de la distance avec ses pensées (ACT)", "pour": "pensées négatives, anxiété, addictions", "etapes": "dire « j'ai la pensée que… » au lieu de « je suis… », agir selon ses valeurs", "preuve": "l'ACT était efficace pour plusieurs troubles psychiques", "source": "A-Tjak et al., Psychother Psychosom, 2015", "pmid": "25547522"}, {"id": "compassion", "nom": "Auto-compassion", "pour": "autocritique, honte, perfectionnisme", "etapes": "se parler comme à un ami : « c'est dur, c'est humain, qu'est-ce qui m'aiderait ? »", "preuve": "les interventions d'auto-compassion réduisaient dépression, anxiété et stress", "source": "Han et al., Mindfulness, 2023", "pmid": "37362192"}, {"id": "si_alors", "nom": "Plan « si… alors… »", "pour": "arrêter de fumer, nouvelles habitudes", "etapes": "préparer : « si [situation piège], alors je [action précise] »", "preuve": "les plans si-alors aidaient l'arrêt du tabac", "source": "McWilliams et al., Health Psychol, 2019", "pmid": "31414843"}, {"id": "nature", "nom": "Marcher dans la nature", "pour": "rumination", "etapes": "marcher 90 minutes dans un espace vert", "preuve": "une marche de 90 min dans la nature réduisait la rumination, contrairement à la ville", "source": "Bratman et al., PNAS, 2015", "pmid": "26124129"}, {"id": "motivation", "nom": "Parler sans juger (entretien motivationnel)", "pour": "aider un proche qui fume, boit, résiste", "etapes": "poser des questions ouvertes, refléter, laisser la personne trouver ses propres raisons", "preuve": "efficace pour changer des comportements (synthèse de méta-analyses)", "source": "Lundahl & Burke, J Clin Psychol, 2009", "pmid": "19739205"}, {"id": "gratitude", "nom": "Gratitude", "pour": "humeur, ruminations négatives", "etapes": "noter 3 choses positives précises le soir", "preuve": "effet positif modeste", "source": "Diniz et al., Einstein, 2023", "pmid": "37585888"}, {"id": "substituts", "nom": "Substituts nicotiniques", "pour": "arrêter de fumer", "etapes": "patch + forme rapide (gomme, spray), dose adaptée avec médecin ou pharmacien", "preuve": "les associations et doses adaptées aident à arrêter (revue Cochrane)", "source": "Lindson et al., Cochrane, 2023", "pmid": "37335995"}];
 STYLES.r7 = { label: "Ambre (R7)", character: "", prompt: R7_LOOK };
 const isR7 = r => r?.fx?.style === "r7";
+const isEcran = r => r?.fx?.style === "ecran";
+
+/* ---------- vidéos d'app (Vague, Sursaut) : enregistrement d'écran + CapCut, puis import ici et programmation ---------- */
+const fmtDate = d => new Date(d).toLocaleString("fr-FR", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+const localInput = d => new Date(new Date(d).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+function ecranCard(r) {
+  const sug = r.fx.suggest && new Date(r.fx.suggest) > Date.now() ? r.fx.suggest : "";
+  return `<div class="card"><span style="width:24px;flex:none;text-align:center" aria-hidden="true">📱</span>
+    <div class="b"><div class="t" dir="auto" data-edit="${r.id}">${esc(r.name)} <span class="small">✎</span></div>
+      <div class="meta"><span class="pill">${esc(r.fx.app || "App")}</span><span class="pill">écran + CapCut</span><span class="pill">15-25 s</span>${sug ? `<span class="pill">📅 ${esc(fmtDate(sug))}</span>` : ""}</div></div>
+    <button class="go" data-ecran="${r.id}" aria-label="Voir le script et importer la vidéo montée">📤</button></div>`;
+}
+function openEcran(r) {
+  if (!r) return;
+  const fx = r.fx, sug = fx.suggest && new Date(fx.suggest) > Date.now() ? fx.suggest : new Date(Math.ceil((Date.now() + 3600e3) / 1800e3) * 1800e3).toISOString();
+  $("#sheet").innerHTML = `<div class="sheet"><div>
+    <h2 style="margin:0 0 4px" dir="auto">${esc(r.name)}</h2>
+    <div class="small">Enregistrement de l'écran de l'iPhone (Centre de contrôle › Enregistrement de l'écran), puis texte à l'écran dans CapCut. Vertical 9:16, 15 à 25 s.</div>
+    <div class="small" style="margin-top:8px;padding:10px;border:1px solid var(--line);border-radius:12px">✅ Rien de faux (ni témoignage, ni chiffre d'utilisateurs, ni résultat garanti) · Vague n'est pas un dispositif médical : aucune promesse de guérison ou de sevrage · prix exacts, jamais « 100 % gratuit » · pas de lien dans la vidéo (« sur l'App Store », lien en bio) · #MoisSansTabac sans logo, visuel ni partenariat sous-entendu.</div>
+    <div style="margin:12px 0">${fx.plans.map(p => `<div class="sayplan"><small>${esc(p.label)}${p.t ? " · " + esc(p.t) : ""}</small>${p.screen ? `🎥 ${esc(p.screen)}<br>` : ""}${p.text ? `🅣 « ${esc(p.text)} »` : ""}</div>`).join("")}</div>
+    ${(fx.notes || []).map(n => `<div class="small" style="margin:6px 0">⚠️ ${esc(n)}</div>`).join("")}
+    <label>Légende (modifiable via ✎)</label><div class="small" dir="auto" style="white-space:pre-wrap">${esc(r.desc)}\n${esc(r.tags)}</div>
+    <label>Vidéo montée (fichier exporté de CapCut)</label><input type="file" id="xFile" accept="video/*">
+    <div class="small" id="xInfo"></div>
+    <label>Date et heure de publication (TikTok + YouTube)</label><input type="datetime-local" id="xDate" value="${localInput(sug)}">
+    <div class="row" style="margin-top:14px"><button class="ghost" id="xClose">Fermer</button><button class="pri" id="xGo" disabled>📤 Importer et programmer</button></div>
+  </div></div>`;
+  let file = null, warn = "";
+  $("#xClose").onclick = () => $("#sheet").innerHTML = "";
+  $("#xFile").onchange = () => {
+    file = $("#xFile").files[0] || null; $("#xGo").disabled = !file; warn = ""; $("#xInfo").textContent = "";
+    if (!file) return;
+    const v = document.createElement("video"); v.preload = "metadata"; v.muted = true; v.src = URL.createObjectURL(file);
+    v.onloadedmetadata = () => {
+      const d = Math.round(v.duration), vert = v.videoHeight > v.videoWidth;
+      warn = [d > 30 ? `dure ${d} s (cible 15-25 s)` : d < 10 ? `ne dure que ${d} s` : "", v.videoWidth && !vert ? "n'est pas verticale" : ""].filter(Boolean).join(" et ");
+      $("#xInfo").textContent = `${Math.round(file.size / 1e6)} Mo · ${d} s · ${v.videoWidth}×${v.videoHeight}` + (warn ? ` · ⚠️ la vidéo ${warn}` : " · ✓");
+      URL.revokeObjectURL(v.src);
+    };
+  };
+  $("#xGo").onclick = async () => {
+    const d = new Date($("#xDate").value);
+    if (!file) return; if (isNaN(d)) return toast("Date invalide");
+    if (warn && !confirm(`Attention : la vidéo ${warn}. Programmer quand même ?`)) return;
+    const b = $("#xGo"); b.disabled = true;
+    try {
+      const ext = /quicktime|\.mov$/i.test(file.type + " " + file.name) ? "mov" : /webm/i.test(file.type) ? "webm" : "mp4";
+      b.textContent = "Préparation…";
+      const up = await api("upload", { id: r.id, ext, t: String(Date.now()) });
+      if (!up.link) throw new Error("pas de lien d'envoi");
+      await putFile(up.link, file, p => b.textContent = `Envoi ${p} %`);
+      b.textContent = "Programmation…";
+      await api("done", { id: r.id, file: up.file, date: d.toISOString(), prod: "cam", sub: "", lang: "fr" });
+      await api("update", { id: r.id, props: JSON.stringify({ Production: { select: { name: "Écran (app)" } } }) });
+      $("#sheet").innerHTML = ""; S.rows = S.rows.filter(x => x.id !== r.id); render();
+      toast(`Programmé pour ${fmtDate(d)} : TikTok + YouTube. Suivi dans 📊 Suivi.`, 6000);
+    } catch (e) { b.disabled = false; b.textContent = "📤 Importer et programmer"; toast("Échec : " + e.message, 6000); }
+  };
+}
 const rx = { get: id => store.get("rx." + id, null), set: (id, v) => store.set("rx." + id, v), del: id => { try { localStorage.removeItem("studio.rx." + id); } catch {} } };
 
 function r7Prompt(o) {
