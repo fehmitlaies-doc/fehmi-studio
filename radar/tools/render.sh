@@ -24,7 +24,11 @@ $HF lint || true
 $HF render --output out.mp4
 ls -la out.mp4
 if [ -n "${UPLOAD:-}" ]; then
-  curl -sSf -X POST "$UPLOAD" -H "Content-Type: application/octet-stream" --data-binary @out.mp4 -o /dev/null
+  CODE=$(curl -sS -X POST "$UPLOAD" -H "Content-Type: application/octet-stream" --data-binary @out.mp4 -o up.out -w "%{http_code}")
+  if [ "$CODE" -ge 300 ]; then
+    echo "::error::Dropbox a refusé l'envoi (HTTP $CODE) : $(head -c 300 up.out). Cause fréquente : Dropbox plein (vérifier l'espace libre)."
+    exit 1
+  fi
   echo "envoyé"
 fi
 [ -n "${GITHUB_EVENT_PATH:-}" ] || cp out.mp4 "$ROOT/out.mp4"
