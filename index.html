@@ -174,7 +174,7 @@ h1{font-size:22px;margin:0}
 <script>
 const API = "https://hook.eu1.make.com/0jj57vomxlae4srwpwj6m74kdrkk24p2";
 // Mise à jour automatique : l'iPhone garde l'ancienne page en cache ; on compare avec la version en ligne et on recharge
-const BUILD = "2026-10-29.7";
+const BUILD = "2026-10-29.8";
 async function checkUpdate() {
   try {
     const t = await (await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" })).text();
@@ -449,6 +449,7 @@ N'ajoute AUCUNE information, aucun chiffre ni aucune affirmation absents de l'or
 Dans chaque plan, "hot" = 1 à 3 mots EXACTS du nouveau "say" ; "word", "stamp" et le dernier mot de "steps" doivent être prononcés dans le "say" du plan.
 ${long ? "Longueur : comparable à l'original, jamais plus longue ; 14 mots maximum par phrase." : "Concision (rétention) : 85 à 100 mots AU TOTAL pour l'ensemble des \"say\" (compte-les) ; raccourcis chaque phrase si besoin, sans perdre l'accroche, les étapes de la technique ni la source. 12 mots maximum par phrase."}
 Titre YouTube 60 caractères max, hashtags adaptés à la langue (5 à 8), description 2-3 phrases + une question.
+Mots-clés ("kw", "tags") : pas une traduction mot à mot, mais ce que les gens tapent vraiment dans cette langue sur ce sujet. "thumb" (texte de miniature) : 2 à 4 mots ; "hl" : le mot de "thumb" à colorer.
 Contenu à adapter (JSON) :
 ${JSON.stringify(data)}
 Réponds UNIQUEMENT avec le même JSON adapté (mêmes clés).`;
@@ -1750,7 +1751,7 @@ async function translateLong(r, btn) {
   if (!confirm(`Créer la version ${lab}${dia} de cette vidéo longue ?\nClaude adapte chaque chapitre (≈ 2 min), puis tu enregistres ta voix chapitre par chapitre ; elle sera publiée sur la chaîne YouTube ${lab === "arabe" ? "arabe" : "française"}.`)) return;
   const old = btn.textContent; btn.disabled = true; btn.textContent = "Claude adapte…";
   try {
-    const meta = parseJSON((await api("gen", { prompt: trPrompt(r, { title: r.name, description: fx.desc0 || r.desc, hashtags: r.tags, tags: fx.tags || "", chapters: fx.chapters }, true) })).text);
+    const meta = parseJSON((await api("gen", { prompt: trPrompt(r, { title: r.name, description: fx.desc0 || r.desc, hashtags: r.tags, tags: fx.tags || "", chapters: fx.chapters, kw: fx.kw || [], thumb: thumbText(r), hl: fx.hl || "" }, true) })).text);
     if (!meta?.title || !Array.isArray(meta.chapters)) throw new Error("adaptation incomplète, réessaie");
     const res = await pool(fx.chapters.map((c, k) => k), 3, async k => {
       const src = fx.plans.filter(p => (p.ch || 0) === k);
@@ -1763,7 +1764,8 @@ async function translateLong(r, btn) {
     const plans = res.flat();
     btn.textContent = "🩺 Relecture…";
     const check = await checkPlans(plans, `version ${lab} d'une vidéo YouTube longue : ${meta.title}`);
-    const nfx = { ...fx, check, lang: to === "عربي" ? "ar" : "fr", dialect: to === "عربي" ? arDia() : undefined, chapters: fx.chapters.map((c, k) => String(meta.chapters[k] || c).slice(0, 90)), tags: String(meta.tags || "").slice(0, 500), desc0: String(meta.description || "").slice(0, 1800), plans, voices: [], chaptersAt: [] };
+    const nfx = { ...fx, check, lang: to === "عربي" ? "ar" : "fr", dialect: to === "عربي" ? arDia() : undefined, chapters: fx.chapters.map((c, k) => String(meta.chapters[k] || c).slice(0, 90)), tags: String(meta.tags || "").slice(0, 500), desc0: String(meta.description || "").slice(0, 1800),
+      kw: (Array.isArray(meta.kw) ? meta.kw : []).map(String).slice(0, 6), thumb: String(meta.thumb || "").slice(0, 40), hl: String(meta.hl || "").slice(0, 20), plans, voices: [], chaptersAt: [] };
     const longRes = await api("create", { props: JSON.stringify({
       Name: { title: [{ text: { content: String(meta.title).slice(0, 100) } }] },
       Script: rt(nfx.chapters.map((c, k) => `## ${c}\n\n` + plans.filter(p => p.ch === k).map(p => p.say).join("\n\n")).join("\n\n")),
