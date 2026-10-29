@@ -174,7 +174,7 @@ h1{font-size:22px;margin:0}
 <script>
 const API = "https://hook.eu1.make.com/0jj57vomxlae4srwpwj6m74kdrkk24p2";
 // Mise à jour automatique : l'iPhone garde l'ancienne page en cache ; on compare avec la version en ligne et on recharge
-const BUILD = "2026-10-29.8";
+const BUILD = "2026-10-29.9";
 async function checkUpdate() {
   try {
     const t = await (await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" })).text();
@@ -1374,7 +1374,10 @@ async function checkPlans(plans, ctx) {
     if (p.left?.t) items.push({ id: k + ".left", t: p.left.t }, { id: k + ".right", t: p.right.t });
     (p.items || []).forEach((x, n) => items.push({ id: `${k}.item${n}`, t: x.t }));
   });
-  const res = await factCheck(items, ctx);
+  // vidéo longue : relue par blocs d'environ 25 éléments en parallèle (un seul gros bloc peut dépasser le délai de Make)
+  const parts = []; for (const it of items) { const last = parts[parts.length - 1]; if (last && (last.length < 25 || last[last.length - 1].id.split(".")[0] === it.id.split(".")[0])) last.push(it); else parts.push([it]); }
+  const done = await pool(parts.map((x, k) => k), 3, k => factCheck(parts[k], ctx + (parts.length > 1 ? ` (partie ${k + 1}/${parts.length})` : "")));
+  const res = { ok: done.every(d => d.ok), fixes: done.flatMap(d => d.fixes) };
   for (const f of res.fixes) {
     const [k, field] = f.id.split("."), p = plans[+k]; if (!p) continue;
     if (field === "say") {
