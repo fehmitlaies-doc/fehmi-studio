@@ -174,7 +174,7 @@ h1{font-size:22px;margin:0}
 <script>
 const API = "https://hook.eu1.make.com/0jj57vomxlae4srwpwj6m74kdrkk24p2";
 // Mise à jour automatique : l'iPhone garde l'ancienne page en cache ; on compare avec la version en ligne et on recharge
-const BUILD = "2026-10-29.2";
+const BUILD = "2026-10-29.3";
 async function checkUpdate() {
   try {
     const t = await (await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" })).text();
@@ -325,7 +325,7 @@ function openEdit(r) {
   if (!r) return;
   $("#sheet").innerHTML = `<div class="sheet"><div>
     <h2 style="margin:0 0 4px" dir="auto">${esc(r.name)}</h2>
-    <label>Script (ce que tu lis au prompteur)</label><textarea id="eScript" rows="10" dir="auto">${esc(r.script)}</textarea>
+    ${r.fx?.plans ? `<label>Script (lecture seule)</label><div class="small">La vidéo animée suit le plan déjà écrit (images, animations, chapitres) : modifier ce texte ne changerait pas la vidéo. Pour un autre texte, supprime-la et demande un nouveau script.</div><textarea id="eScript" rows="8" dir="auto" readonly>${esc(r.script)}</textarea>` : `<label>Script (ce que tu lis au prompteur)</label><textarea id="eScript" rows="10" dir="auto">${esc(r.script)}</textarea>`}
     <label>Description</label><textarea id="eDesc" rows="3" dir="auto" placeholder="Vide = Claude l'écrit à l'envoi">${esc(r.desc)}</textarea>
     <label>Texte écran (accroche des 3 premières secondes, 3 à 6 mots)</label><input id="eHook" dir="auto" value="${esc(r.hook)}" placeholder="Vide = Claude l'écrit avant le tournage">
     <label>Hashtags</label><input id="eTags" dir="auto" value="${esc(r.tags)}" placeholder="Vide = Claude les choisit">
@@ -845,11 +845,12 @@ async function toggleIdeas() {
   const draw = () => {
     const lang = $("#gLang").value === "عربي" ? "ar" : "fr", cats = IDEAS.cats.filter(c => c.l === lang);
     if (!cats.some(c => c.id === cat)) cat = cats[0].id;
-    const list = IDEAS.ideas.filter(i => q ? cats.some(c => c.id === i.c) && (i.t + " " + (i.k || "")).toLowerCase().includes(q.toLowerCase()) : i.c === cat);
+    const long = document.querySelector("#gMode .on")?.dataset.m === "long";
+    const list = IDEAS.ideas.filter(i => q ? cats.some(c => c.id === i.c) && (i.t + " " + (i.k || "")).toLowerCase().includes(q.toLowerCase()) : i.c === cat).sort((a, b) => long ? !!b.L - !!a.L : 0);
     box.innerHTML = `<div style="display:flex;gap:6px;flex-wrap:wrap;margin:10px 0">${cats.map(c => `<button class="ghost${c.id === cat && !q ? " on" : ""}" data-icat="${c.id}" style="width:auto;padding:6px 10px;font-size:13px">${esc(c.n)}</button>`).join("")}</div>
       <input id="gIq" placeholder="Chercher une idée…" dir="auto" value="${esc(q)}">
-      <div style="max-height:46vh;overflow:auto;margin-top:8px">${list.map(i => `<button class="ghost" data-idea="${IDEAS.ideas.indexOf(i)}" dir="auto" style="display:block;width:100%;text-align:start;margin:6px 0;padding:10px 12px">${i.e ? "⭐ " : ""}${esc(i.t)}<div class="small" style="margin-top:4px">🔎 ${esc(i.k || IDEAS.cats.find(c => c.id === i.c).kw[0])}</div></button>`).join("") || `<div class="small">Aucune idée trouvée.</div>`}</div>
-      <div class="small" style="margin-top:6px">⭐ = mot-clé mesuré avec peu de concurrence (plus facile à classer). ${esc(IDEAS.source)}</div>`;
+      <div style="max-height:46vh;overflow:auto;margin-top:8px">${list.map(i => `<button class="ghost" data-idea="${IDEAS.ideas.indexOf(i)}" dir="auto" style="display:block;width:100%;text-align:start;margin:6px 0;padding:10px 12px">${i.e ? "⭐ " : ""}${i.L ? "📺 " : ""}${esc(i.t)}<div class="small" style="margin-top:4px">🔎 ${esc(i.k || IDEAS.cats.find(c => c.id === i.c).kw[0])}</div></button>`).join("") || `<div class="small">Aucune idée trouvée.</div>`}</div>
+      <div class="small" style="margin-top:6px">⭐ = mot-clé mesuré avec peu de concurrence (plus facile à classer) · 📺 = sujet assez riche pour une vidéo longue${long ? " (affichés en premier)" : ""}. ${esc(IDEAS.source)}</div>`;
     box.querySelectorAll("[data-icat]").forEach(b => b.onclick = () => { cat = b.dataset.icat; q = ""; store.set("ideaCat", cat); draw(); });
     $("#gIq").oninput = e => { q = e.target.value; const pos = e.target.selectionStart; draw(); const n = $("#gIq"); n.focus(); n.setSelectionRange(pos, pos); };
     box.querySelectorAll("[data-idea]").forEach(b => b.onclick = () => {
@@ -889,7 +890,7 @@ $("#bNew").onclick = () => {
   $("#gIdeas").onclick = () => toggleIdeas();
   let mode = o.mode || "cam";
   const setMode = m => { mode = m; document.querySelectorAll("#gMode button").forEach(b => b.classList.toggle("on", b.dataset.m === m)); $("#gStyleBox").hidden = m !== "fx"; $("#gLongBox").hidden = m !== "long"; $("#gSec").disabled = m !== "cam"; $("#gN").parentElement.hidden = $("#gSec").parentElement.hidden = m === "long"; };
-  $("#gMode").onclick = e => { const m = e.target.closest("[data-m]")?.dataset.m; if (m) setMode(m); };
+  $("#gMode").onclick = e => { const m = e.target.closest("[data-m]")?.dataset.m; if (m) { setMode(m); if (!$("#gIdeaBox").hidden) { $("#gIdeaBox").hidden = true; toggleIdeas(); } } };
   setMode(mode);
   $("#gCancel").onclick = () => $("#sheet").innerHTML = "";
   $("#gGo").onclick = async () => {
@@ -1348,7 +1349,7 @@ RÈGLES SPÉCIFIQUES VIDÉO LONGUE :
 - Total : environ ${words} mots (répartis dans "words").
 TECHNIQUES PROUVÉES :
 ${TECHNIQUES.map(t => `- [${t.id}] ${t.nom} — pour : ${t.pour}. Étapes : ${t.etapes}. Ce que l'étude montre : ${t.preuve}. Source : ${t.source}`).join("\n")}
-Réponds UNIQUEMENT en JSON : {"title": "titre YouTube, mot-clé en premier, 70 caractères max", "description": "4 à 6 phrases : la 1re contient le mot-clé principal ; résumé de ce qu'on apprend ; sans hashtags", "hashtags": "3 à 5 hashtags", "tags": "12 à 15 tags YouTube séparés par des virgules : mot-clé, variantes, longues traînes, questions", "technique": "id", "chapters": [{"t": "titre du chapitre", "q": "question exacte tapée par les gens", "points": ["idée 1", "idée 2", "idée 3"], "words": 150}]}`;
+Réponds UNIQUEMENT en JSON : {"title": "titre YouTube, mot-clé en premier, 70 caractères max", "description": "4 à 6 phrases : la 1re contient le mot-clé principal ; résumé de ce qu'on apprend ; sans hashtags", "hashtags": "3 à 5 hashtags", "tags": "12 à 15 tags YouTube séparés par des virgules : mot-clé, variantes, longues traînes, questions", "technique": "id", "thumb": "texte de la MINIATURE : 2 à 4 mots percutants (émotion, curiosité, bénéfice), qui COMPLÈTENT le titre sans le répéter, ${o.lang === "ar" ? "en arabe" : "en français"}", "hl": "le mot de la miniature à colorer en ambre", "chapters": [{"t": "titre du chapitre", "q": "question exacte tapée par les gens", "points": ["idée 1", "idée 2", "idée 3"], "words": 150}]}`;
 }
 const LONG_GFX = `"gfx" (au plus 1 plan sur 2, varie, jamais deux fois le même d'affilée) : "card" ("card": {"b": "ce que l'étude montre en 10 mots max", "i": "la source exacte"}) · "check" ("items": [{"t": "3-6 mots", "ok": true|false}] 2 ou 3) · "split" ("left": {"label": "MYTHE" ou "AVANT", "t": "4-8 mots"}, "right": {"label": "VÉRITÉ" ou "APRÈS", "t": "4-8 mots"}) · "quote" ("quote": phrase à retenir, 14 mots max) · "count" ("count": nombre d'étapes) · "breath" ("steps": 2-3 étiquettes en MAJUSCULES dont le dernier mot est prononcé) · "bigword" ("word": UN mot prononcé dans le plan) · "stamp" ("stamp": "FAUX", "VRAI" ou "MYTHE", prononcé dans le plan) · "timer" ("seconds": 3 à 10) · "ecg" · "pulse" · "ring" (intro seulement) · "cta" ("cta": mot à écrire en commentaire, conclusion seulement) · "none".`;
 function longChapterPrompt(o, out, k) {
@@ -1426,7 +1427,7 @@ async function longWrite(opt, out) {
     const plans = res.flatMap((ps, k) => ps.map(p => ({ ...p, ch: k })));
     const lang = opt.lang === "ar" ? "عربي" : "Francais";
     const fx = { style: "long", lang: opt.lang, kw: opt.kw || [], technique: String(out.technique || ""), music: "calme", speed: 1.1,
-      chapters: out.chapters.map(c => String(c.t || "").slice(0, 90)), tags: String(out.tags || "").slice(0, 500), desc0: String(out.description || "").slice(0, 1800), plans, voices: [] };
+      chapters: out.chapters.map(c => String(c.t || "").slice(0, 90)), tags: String(out.tags || "").slice(0, 500), desc0: String(out.description || "").slice(0, 1800), thumb: String(out.thumb || "").slice(0, 40), hl: String(out.hl || "").slice(0, 20), plans, voices: [] };
     await api("create", { props: JSON.stringify({
       Name: { title: [{ text: { content: String(out.title || opt.topic).slice(0, 100) } }] },
       Script: rt(fx.chapters.map((c, k) => `## ${k ? k + ". " : ""}${c}\n\n` + plans.filter(p => p.ch === k).map(p => p.say).join("\n\n")).join("\n\n")),
@@ -1526,21 +1527,103 @@ async function longFinish(r, run) {
   fx.chaptersAt = ch; r.desc = desc;
   return { Description: rt(desc), "Scènes": rt(JSON.stringify(fx)) };
 }
+/* ---------- miniature YouTube 1280×720 : ta photo, 2 à 4 mots en très gros, un mot ambre, fort contraste ---------- */
+let thumbFonts = null;
+function loadThumbFonts() {
+  return thumbFonts ||= Promise.all([["ThumbLa", "radar/pack/Archivo.ttf"], ["ThumbAr", "radar/pack/Cairo-ar.ttf"]].map(async ([f, u]) => {
+    try { const ff = new FontFace(f, `url(${u})`, { weight: "100 900" }); await ff.load(); document.fonts.add(ff); } catch {}
+  }));
+}
+// le texte de la miniature complète le titre (il ne le répète pas) : Claude le propose avec le plan, sinon on le tire du mot-clé
+const thumbText = r => r.fx.thumb || (r.fx.kw?.[0] || r.name.split(/[:?!–-]/)[0]).split(/\s+/).slice(0, 4).join(" ");
+async function drawThumb(r, text, hl) {
+  await loadThumbFonts();
+  const ar = isAr(r), W = 1280, H = 720, c = document.createElement("canvas"); c.width = W; c.height = H;
+  const g = c.getContext("2d"), font = ar ? "ThumbAr" : "ThumbLa";
+  g.fillStyle = "#17121C"; g.fillRect(0, 0, W, H);
+  // image du sujet en fond, très sombre, côté texte : chaque miniature reste reconnaissable
+  const key = r.fx.thumbImg || r.fx.plans.find(p => PACK[p.img])?.img;
+  if (key) try {
+    const im = await loadImg(`radar/pack/${key}.jpg`), s = Math.max(W / im.width, H / im.height);
+    g.globalAlpha = .42; g.drawImage(im, (W - im.width * s) / 2, (H - im.height * s) / 2, im.width * s, im.height * s); g.globalAlpha = 1;
+  } catch {}
+  const side = g.createLinearGradient(ar ? W : 0, 0, ar ? 0 : W, 0);
+  side.addColorStop(0, "rgba(23,18,28,.55)"); side.addColorStop(.5, "rgba(23,18,28,.75)"); side.addColorStop(1, "rgba(23,18,28,.92)");
+  g.fillStyle = side; g.fillRect(0, 0, W, H);
+  // halo ambre derrière le visage
+  const px = ar ? 330 : W - 330, glow = g.createRadialGradient(px, 300, 40, px, 330, 470);
+  glow.addColorStop(0, "rgba(242,165,65,.55)"); glow.addColorStop(.55, "rgba(242,165,65,.12)"); glow.addColorStop(1, "rgba(242,165,65,0)");
+  g.fillStyle = glow; g.fillRect(0, 0, W, H);
+  // photo : grand visage, coupée en bas, contour lumineux ambre
+  try {
+    const me = await loadImg("radar/pack/fehmi.webp"), h = 730, w = me.width * h / me.height, x = ar ? -40 : W - w + 40;
+    g.save(); g.shadowColor = "rgba(242,165,65,.9)"; g.shadowBlur = 38; g.drawImage(me, x, H - h + 30, w, h); g.restore();
+    g.drawImage(me, x, H - h + 30, w, h);
+  } catch {}
+  // badge d'autorité
+  const badge = ar ? "د. فهمي · طبيب نفسي" : "DR FEHMI · PSYCHIATRE";
+  g.font = `800 30px ${font}`; g.direction = ar ? "rtl" : "ltr"; g.textAlign = ar ? "right" : "left"; g.textBaseline = "middle";
+  const bw = g.measureText(badge).width + 40, bx = ar ? W - 56 - bw : 56;
+  g.fillStyle = "#F2A541"; g.beginPath(); g.roundRect(bx, 50, bw, 56, 28); g.fill();
+  g.fillStyle = "#17121C"; g.fillText(badge, ar ? bx + bw - 20 : bx + 20, 79);
+  // texte : 2 à 4 mots, majuscules, taille ajustée pour occuper la zone gauche (droite en arabe)
+  const words = String(text || "").trim().split(/\s+/).filter(Boolean).slice(0, 6).map(w => ar ? w : w.toUpperCase());
+  if (!words.length) return c;
+  const maxW = 600, maxH = 470, hot = new Set(normW(hl || "").filter(t => t.length > 1));
+  let size = 170, lines = [];
+  for (; size > 56; size -= 6) {
+    g.font = `900 ${size}px ${font}`; lines = [];
+    for (const w of words) {
+      const last = lines[lines.length - 1];
+      if (last && g.measureText(last.concat(w).join(" ")).width <= maxW) last.push(w); else lines.push([w]);
+    }
+    const lh = size * (ar ? 1.25 : 1.02);
+    if (lines.length <= 3 && lines.every(l => g.measureText(l.join(" ")).width <= maxW) && lines.length * lh <= maxH) break;
+  }
+  const lh = size * (ar ? 1.25 : 1.02), top = 130 + (maxH - lines.length * lh) / 2 + lh / 2, x0 = ar ? W - 64 : 64;
+  g.lineJoin = "round"; g.lineWidth = Math.round(size / 9); g.strokeStyle = "#0B080E";
+  lines.forEach((l, i) => {
+    let x = x0; const y = top + i * lh, sp = g.measureText(" ").width;
+    for (const w of l) {
+      const ww = g.measureText(w).width;
+      g.save(); g.shadowColor = "rgba(0,0,0,.6)"; g.shadowBlur = 24; g.strokeText(w, x, y); g.restore();
+      g.fillStyle = normW(w).some(t => hot.has(t)) ? "#F2A541" : "#FFF4DC"; g.fillText(w, x, y);
+      x += (ar ? -1 : 1) * (ww + sp);
+    }
+  });
+  return c;
+}
 // 4. publication YouTube (chaîne de la langue) à la date choisie
 function publishLong(r) {
   const d0 = new Date(); d0.setDate(d0.getDate() + 1); d0.setHours(18, 0, 0, 0);
   $("#sheet").innerHTML = `<div class="sheet"><div>
     <h2 style="margin:0 0 4px" dir="auto">${esc(r.name)}</h2>
     <div class="small">Publiée sur YouTube seulement (chaîne ${isAr(r) ? "Dr Fehmi AR" : "Fehmi Tlaies FR"}), avec les chapitres dans la description. Titre, description et date restent modifiables dans 📊 Suivi.</div>
+    <label>Miniature</label><div id="tPrev" style="aspect-ratio:16/9;border-radius:12px;overflow:hidden;background:#17121C"></div>
+    <div class="row"><div style="flex:2"><label>Texte (2 à 4 mots)</label><input id="tText" dir="auto" maxlength="40" value="${esc(thumbText(r))}"></div>
+      <div><label>Mot en ambre</label><input id="tHl" dir="auto" maxlength="20" value="${esc(r.fx.hl || "")}"></div></div>
+    <label>Image de fond</label><select id="tImg">${Object.entries(PACK).map(([k, v]) => `<option value="${k}" ${(r.fx.thumbImg || r.fx.plans.find(p => PACK[p.img])?.img) === k ? "selected" : ""}>${esc(v)}</option>`).join("")}</select>
     <label>Date et heure de publication</label><input type="datetime-local" id="lDate" value="${localInput(d0)}">
     <div class="row" style="margin-top:14px"><button class="ghost" id="lpClose">Fermer</button><button class="pri" id="lpGo">🚀 Programmer</button></div>
   </div></div>`;
+  let cv = null, seq = 0;
+  const redraw = async () => {
+    const n = ++seq; r.fx.thumb = $("#tText").value.trim(); r.fx.hl = $("#tHl").value.trim(); r.fx.thumbImg = $("#tImg").value;
+    const c = await drawThumb(r, r.fx.thumb, r.fx.hl); if (n !== seq || !$("#tPrev")) return;
+    cv = c; c.style.cssText = "width:100%;height:100%;display:block"; $("#tPrev").replaceChildren(c);
+  };
+  let tm; ["tText", "tHl"].forEach(id => $("#" + id).oninput = () => { clearTimeout(tm); tm = setTimeout(redraw, 250); });
+  $("#tImg").onchange = redraw; redraw();
   $("#lpClose").onclick = () => $("#sheet").innerHTML = "";
   $("#lpGo").onclick = async () => {
     const d = new Date($("#lDate").value); if (isNaN(d)) return toast("Date invalide");
-    const b = $("#lpGo"); b.disabled = true; b.textContent = "Programmation…";
+    const b = $("#lpGo"); b.disabled = true; b.textContent = "Envoi de la miniature…";
     try {
-      await api("update", { id: r.id, props: JSON.stringify({ Production: { select: { name: "Visuels IA" } }, Type: { select: { name: "Video Long" } }, "Pipeline Stage": { select: { name: "Scheduled" } }, "Statut publication": { select: { name: "En attente" } }, "Publish Date": { date: { start: d.toISOString() } } }) });
+      let thumb = null;
+      try { await redraw(); thumb = await pfmUpload(await new Promise(ok => cv.toBlob(ok, "image/jpeg", .9))); } catch { toast("Miniature non envoyée : YouTube prendra une image de la vidéo.", 5000); }
+      b.textContent = "Programmation…";
+      const tags = String(r.fx.tags || "").split(/[,،]/).map(t => t.trim().replace(/^#/, "")).filter(Boolean).slice(0, 15);
+      await api("update", { id: r.id, props: JSON.stringify({ "Thumbnail URL": { url: thumb }, "Tags YouTube": rt(JSON.stringify(tags)), "Scènes": rt(JSON.stringify(r.fx)), Production: { select: { name: "Visuels IA" } }, Type: { select: { name: "Video Long" } }, "Pipeline Stage": { select: { name: "Scheduled" } }, "Statut publication": { select: { name: "En attente" } }, "Publish Date": { date: { start: d.toISOString() } } }) });
       rx.del(r.id); S.rows = S.rows.filter(x => x.id !== r.id); $("#sheet").innerHTML = ""; render();
       toast(`Programmée pour ${fmtDate(d)} sur YouTube.`, 5000);
     } catch (e) { b.disabled = false; b.textContent = "🚀 Programmer"; toast(e.message); }
