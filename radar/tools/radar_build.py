@@ -351,6 +351,10 @@ if len(lab) > 1:
         pass
 h[2] = f'<audio id="voice" data-start="0" data-duration="{audio_dur:.2f}" data-track-index="1" src="assets/{audio_src}"></audio>'
 
+# extrait d'une vidéo longue : rappel « vidéo complète » sur les dernières secondes
+if job.get('endcard'):
+    h.append(f'<div class="g" id="endc" style="top:1585px;left:80px;right:80px;text-align:center"><span style="display:inline-block;font-family:{CF};font-weight:800;font-size:44px;line-height:1.2;color:#17121C;background:#F2A541;border-radius:999px;padding:16px 40px;direction:{DIR}">{H.escape(nb(job["endcard"]))}</span></div>')
+    js.append(f'tl.fromTo("#endc",{{opacity:0,y:30}},{{opacity:1,y:0,duration:.4,ease:"back.out(2)"}},{max(0, END - 4.6):.2f});')
 h.append('<div id="fade"></div>')
 js.append(f'tl.to("#fade",{{opacity:1,duration:1.2,ease:"power1.in"}},{END - 1.3:.2f});')
 js.append('window.__timelines["main"]=tl;')

@@ -174,7 +174,7 @@ h1{font-size:22px;margin:0}
 <script>
 const API = "https://hook.eu1.make.com/0jj57vomxlae4srwpwj6m74kdrkk24p2";
 // Mise à jour automatique : l'iPhone garde l'ancienne page en cache ; on compare avec la version en ligne et on recharge
-const BUILD = "2026-10-29.1";
+const BUILD = "2026-10-29.2";
 async function checkUpdate() {
   try {
     const t = await (await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" })).text();
@@ -373,7 +373,7 @@ async function loadTrack() {
         <div class="meta"><span class="pill">${i.lang === "عربي" ? "AR" : "FR"}</span><span class="pill ${cls}">${esc(i.st || i.stage)}</span>${i.prod ? `<span class="pill">${esc(i.prod)}</span>` : ""}${d ? `<span class="pill">${esc(d)}</span>` : ""}${i.cost != null ? `<span class="pill">💲 ${money(i.cost)}</span>` : ""}</div>
         ${i.video ? `<div class="vbox" data-v="${esc(i.video)}"><button class="ghost vplay">▶ Regarder${i.st === "Sous-titrage" ? " (sous-titres en cours…)" : ""}</button></div>` : ""}
         ${i.links.length ? `<div class="links small" style="margin-top:6px">${[...new Set(i.links)].map(u => `<a href="${esc(u)}" target="_blank" rel="noopener">${/tiktok/.test(u) ? "TikTok" : /youtu/.test(u) ? "YouTube" : "lien"}</a>`).join("")}</div>` : ""}
-        <div class="row" style="margin-top:8px">${editable(i) ? `<button class="ghost" data-pedit="${i.r.id}">✎ Modifier</button>` : `<span class="small" style="align-self:center">En ligne : TikTok et YouTube ne permettent plus de changer le texte d'ici.</span>`}${trButton(i.r)}</div>
+        <div class="row" style="margin-top:8px">${editable(i) ? `<button class="ghost" data-pedit="${i.r.id}">✎ Modifier</button>` : `<span class="small" style="align-self:center">En ligne : TikTok et YouTube ne permettent plus de changer le texte d'ici.</span>`}${trButton(i.r)}${clipBtn(i)}</div>
       </div></div>`;
     }).join("") + `<div class="small" style="text-align:center;margin-top:10px">« En attente » part à l'heure prévue (vérifié toutes les 30 min) · « Envoyé » = en cours chez TikTok/YouTube · liens directs vers les vidéos ajoutés automatiquement (≈ 30 min après l'envoi).</div>
 `;
@@ -386,6 +386,7 @@ const editable = i => i.stage === "Scheduled" && ["En attente", "Sous-titrage", 
 $("#track").addEventListener("click", e => {
   const ed = e.target.closest("[data-pedit]"); if (ed) { openPostEdit(S.track.find(i => i.r.id === ed.dataset.pedit)); return; }
   const tr = e.target.closest("[data-tr]"); if (tr) translateVideo(S.track.find(i => i.r.id === tr.dataset.tr)?.r, tr);
+  const cl = e.target.closest("[data-clips]"); if (cl) makeClips(S.track.find(i => i.r.id === cl.dataset.clips), cl);
 });
 function openPostEdit(i) {
   if (!i) return;
@@ -870,7 +871,7 @@ $("#bNew").onclick = () => {
     <label>Format</label>
     <div class="seg" id="gMode" style="width:100%"><button data-m="cam" style="flex:1">🎥 Face caméra</button><button data-m="fx" style="flex:1">🎞 Sans visage</button><button data-m="long" style="flex:1">📺 Vidéo longue</button></div>
     <div id="gLongBox" hidden><div class="small" style="margin-top:8px">YouTube 16:9, pensée pour le référencement : Claude (Opus) propose un plan en chapitres que tu valides, puis écrit le script. Tu enregistres ta voix chapitre par chapitre ; montage animé, chapitres horodatés et publication YouTube automatiques.</div>
-      <label>Durée visée</label><select id="gMin"><option value="6">6 min</option><option value="8" selected>8 min</option><option value="10">10 min</option><option value="12">12 min</option></select></div>
+      <label>Durée visée</label><select id="gMin"><option value="5">5 min</option><option value="6" selected>6 min</option><option value="8">8 min</option><option value="10">10 min (maximum conseillé)</option></select></div>
     <div id="gStyleBox" hidden><div class="small" style="margin-top:8px">Style ambre : ta voix (enregistrée avec 🎙, ou ta voix clonée) · personnage du pack · animations · sous-titres incrustés · étiquette IA cochée.</div></div>
     <button class="ghost" id="gIdeas" style="width:100%;margin-top:12px">💡 Idées prêtes (Vague, Sursaut, santé mentale FR / AR)</button>
     <div id="gIdeaBox" hidden></div>
@@ -1291,8 +1292,8 @@ CHAQUE PLAN :
 MUSIQUE : choisis "music" parmi ${Object.entries(MUSICS).map(([k, v]) => `${k} = ${v}`).join(" ; ")}.${o.lang === "ar" ? " En arabe, préfère oriental ou calme." : ""}
 ${o.lang === "ar" ? "Vidéo en arabe : TOUS les textes affichés sont en arabe, étiquettes comprises (قبل / بعد، خرافة / الحقيقة، tampons خطأ / صحيح / خرافة، شهيق / زفير). Jamais de mot français à l'écran.\n" : ""}Réponds UNIQUEMENT en JSON : {"technique": "id", "title": "titre YouTube 60 caractères max", "hook": "texte écran 3 à 6 mots", "description": "2-3 phrases + question, sans hashtags", "hashtags": "5 hashtags", "ghost": "UN mot-thème en majuscules", "music": "calme", "plans": [{"say": "", "title": "", "img": "", "gfx": "", "hot": []}]}`;
 }
-function cleanPlans(arr) {
-  return (arr || []).filter(p => p && String(p.say || "").trim()).slice(0, 12).map(p => {
+function cleanPlans(arr, max = 12) {
+  return (arr || []).filter(p => p && String(p.say || "").trim()).slice(0, max).map(p => {
     const o = { say: String(p.say).trim(), title: String(p.title || "").slice(0, 60), img: PACK[p.img] ? p.img : "standing",
       gfx: ["ring", "pulse", "breath", "cta", "ecg", "card", "count", "check", "split", "quote", "bigword", "stamp", "timer", "none"].includes(p.gfx) ? p.gfx : "none", hot: (p.hot || []).map(String).slice(0, 4) };
     if (o.gfx === "check") o.items = (p.items || []).slice(0, 3).map(x => ({ t: String(x?.t || "").slice(0, 40), ok: x?.ok !== false }));
@@ -1339,10 +1340,11 @@ Langue : ${longLang(o)}.
 ${o.promo ? appRules(o.app || "Vague") : "Pas de promotion."}
 ${seoRules(o)}
 RÈGLES SPÉCIFIQUES VIDÉO LONGUE :
-- Intention de recherche : la personne a tapé une question. L'intro (chapitre 0, 70 à 100 mots) y répond en une phrase dans les 20 premières secondes, prononce le mot-clé principal, puis annonce ce que la vidéo apporte (promesse concrète) et donne une raison de rester jusqu'au bout.
-- 5 à 7 chapitres au total, intro et conclusion comprises. Chaque chapitre intermédiaire répond à UNE question précise de longue traîne que les gens tapent (« pourquoi… », « comment… », « que faire quand… », « différence entre… ») : son titre contient cette expression, 50 caractères max.
+- Intention de recherche : la personne a tapé une question. L'intro (chapitre 0, 45 à 70 mots, moins de 30 secondes : c'est là que la plupart des gens partent) y répond en une phrase dès les 10 premières secondes, prononce le mot-clé principal, annonce une promesse concrète et ouvre une boucle (ce qu'on révèle à la fin, ex. « l'erreur que presque tout le monde fait »). Pas de présentation, pas de « dans cette vidéo nous allons voir » en longueur.
+- Rétention : une vidéo de 5 à 10 minutes, dense, sans remplissage ni répétition. Chaque chapitre commence par une relance (question ou enjeu concret) ; exemples du quotidien plutôt que théorie ; la boucle ouverte de l'intro est refermée dans la conclusion.
+- 4 à 6 chapitres au total, intro et conclusion comprises. Chaque chapitre intermédiaire répond à UNE question précise de longue traîne que les gens tapent (« pourquoi… », « comment… », « que faire quand… », « différence entre… ») : son titre contient cette expression, 50 caractères max.
 - Au moins un chapitre explique une technique prouvée, étape par étape, avec sa source exacte (liste ci-dessous) ; jamais de chiffre ni d'étude inventés.
-- Conclusion (60 à 90 mots) : récapitulatif en 3 points, quand consulter un professionnel, invitation à s'abonner et à regarder une autre vidéo du même thème.
+- Conclusion (50 à 80 mots) : referme la boucle ouverte, récapitulatif en 3 points, quand consulter un professionnel, invitation à s'abonner et à regarder une autre vidéo du même thème.
 - Total : environ ${words} mots (répartis dans "words").
 TECHNIQUES PROUVÉES :
 ${TECHNIQUES.map(t => `- [${t.id}] ${t.nom} — pour : ${t.pour}. Étapes : ${t.etapes}. Ce que l'étude montre : ${t.preuve}. Source : ${t.source}`).join("\n")}
@@ -1356,11 +1358,11 @@ Titre de la vidéo : ${out.title}
 Plan complet : ${out.chapters.map((c, i) => `${i + 1}. ${c.t}`).join(" · ")}
 CE CHAPITRE : « ${ch.t} » — répond à : ${ch.q}. Points : ${(ch.points || []).join(" ; ")}. Environ ${ch.words || 150} mots.
 Langue : ${longLang(o)}.
-${k === 0 ? "C'est l'intro : 1re phrase = réponse directe à la question tapée, mot-clé principal prononcé dans les 10 premières secondes, promesse concrète, raison de rester jusqu'au bout. Pas de « Bonjour », pas de présentation longue." : k === out.chapters.length - 1 ? "C'est la conclusion : récapitule en 3 points, dis quand consulter un professionnel, invite à s'abonner et à regarder une autre vidéo du même thème." : "Le 1er plan pose la question du chapitre avec l'expression exacte (référencement), puis y répond concrètement : exemples du quotidien, étapes, erreurs fréquentes."}
+${k === 0 ? "C'est l'intro (45 à 70 mots, moins de 30 secondes) : 1re phrase = réponse directe à la question tapée, mot-clé principal prononcé dans les 10 premières secondes, promesse concrète, boucle ouverte (ce qu'on révèle à la fin). Pas de « Bonjour », pas de présentation longue." : k === out.chapters.length - 1 ? "C'est la conclusion : récapitule en 3 points, dis quand consulter un professionnel, invite à s'abonner et à regarder une autre vidéo du même thème." : "Le 1er plan pose la question du chapitre avec l'expression exacte (référencement), puis y répond concrètement : exemples du quotidien, étapes, erreurs fréquentes."}
 ${tech ? `Technique de la vidéo : ${tech.nom}. Étapes : ${tech.etapes}. Ce que l'étude montre : ${tech.preuve}. Source à citer telle quelle : ${tech.source}.` : ""}
 Interdit : inventer un chiffre, une étude ou un pourcentage ; poser un diagnostic ; conseil médical dangereux.
 ${o.promo ? appRules(o.app || "Vague") : ""}
-Découpe en plans de 15 à 40 mots (1 à 3 phrases, 14 mots max par phrase), un changement d'image à chaque plan ; relances naturelles entre les idées (« Et c'est là que… », « Concrètement… »).
+Découpe en plans de 10 à 22 mots (1 ou 2 phrases, 14 mots max par phrase) : un changement d'image toutes les 6 à 10 secondes ; relances naturelles entre les idées (« Et c'est là que… », « Concrètement… »).
 - "title" : texte affiché à l'écran, 2 à 7 mots, l'idée du plan (pas une copie de la phrase).
 - "img" : une clé de cette liste : ${Object.entries(PACK).map(([key, v]) => `${key} (${v})`).join(", ")}.
 - ${LONG_GFX}${o.lang === "ar" ? `
@@ -1416,7 +1418,7 @@ async function longWrite(opt, out) {
   try {
     const res = await pool(out.chapters.map((c, k) => k), 3, async k => {
       for (let i = 0; i < 2; i++) {
-        const ps = cleanPlans(parseJSON((await api("gen", { prompt: longChapterPrompt(opt, out, k) })).text)?.plans);
+        const ps = cleanPlans(parseJSON((await api("gen", { prompt: longChapterPrompt(opt, out, k) })).text)?.plans, 20);
         if (ps.length >= 2) { b.textContent = `Claude écrit… ${++done}/${n}`; return ps; }
       }
       throw new Error(`le chapitre ${k + 1} n'a pas pu être écrit, réessaie dans une minute`);
@@ -1555,7 +1557,7 @@ async function translateLong(r, btn) {
     const res = await pool(fx.chapters.map((c, k) => k), 3, async k => {
       const src = fx.plans.filter(p => (p.ch || 0) === k);
       for (let i = 0; i < 2; i++) {
-        const ps = cleanPlans(parseJSON((await api("gen", { prompt: trPrompt(r, { plans: src }, true) })).text)?.plans);
+        const ps = cleanPlans(parseJSON((await api("gen", { prompt: trPrompt(r, { plans: src }, true) })).text)?.plans, 20);
         if (ps.length) return ps.map((p, j) => { const o = src[j] || {}; return { ...p, img: o.img || p.img, gfx: o.gfx || p.gfx, ch: k, ...(o.card ? { card: { b: p.card?.b || o.card.b, i: o.card.i } } : {}) }; });
       }
       throw new Error(`chapitre ${k + 1} : adaptation incomplète, réessaie`);
@@ -1573,6 +1575,78 @@ async function translateLong(r, btn) {
     btn.outerHTML = `<span class="pill ok" style="align-self:center">✓ version ${lab === "arabe" ? "AR" : "FR"} créée</span>`;
     toast(`Version ${lab} créée : elle est dans 🎬 Tourner.`, 5000); if (S.tab === "shoot") load();
   } catch (e) { btn.disabled = false; btn.textContent = old; toast(e.message, 6000); }
+}
+
+/* ---------- Shorts tirés d'une vidéo longue publiée : extraits choisis par Claude, ta voix, lien vers la vidéo complète ---------- */
+const ytOf = i => (i.links || []).find(u => /youtu/.test(u));
+const clipBtn = i => !isLong(i.r) || !ytOf(i) ? "" : i.r.fx.clips?.length ? `<span class="pill ok" style="align-self:center">✂️ ${i.r.fx.clips.length} Shorts programmés</span>` : `<button class="pri" data-clips="${i.r.id}">✂️ Créer les Shorts</button>`;
+const normW = t => String(t).toLowerCase().normalize("NFD").replace(/[̀-ًͯ-ْ]/g, "").split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+// l'extrait doit reprendre mot pour mot des phrases consécutives du chapitre (l'audio est ta voix, déjà enregistrée)
+function clipOk(r, c) {
+  const cw = normW(c.plans.map(p => p.say).join(" ")), ch = normW(chText(r, c.ch)).join(" ");
+  if (cw.length < 35 || cw.length > 115) return false;
+  if (ch.includes(cw.join(" "))) return true;
+  const set = new Set(ch.split(" ")); return cw.filter(w => set.has(w)).length / cw.length >= 0.93;
+}
+function clipsPrompt(r) {
+  const fx = r.fx, ar = isAr(r);
+  return `Tu tires des Shorts (TikTok, YouTube Shorts) d'une vidéo YouTube longue du Dr Fehmi, médecin psychiatre. L'audio est SA voix déjà enregistrée : tu ne peux changer AUCUN mot, seulement choisir des passages.
+Vidéo : ${r.name}
+Mot-clé principal : ${fx.kw?.[0] || "(choisis le plus recherché)"}
+Chapitres (texte exact) :
+${fx.chapters.map((c, k) => `[${k}] ${c}\n${chText(r, k)}`).join("\n\n")}
+Choisis 3 à 5 extraits, au plus 1 par chapitre (de préférence les chapitres du milieu, les plus utiles) :
+- Un extrait = des phrases CONSÉCUTIVES copiées MOT POUR MOT d'un seul chapitre, 45 à 95 mots (20 à 55 secondes).
+- Il commence par la phrase la plus accrocheuse possible (question qui touche une douleur, affirmation contre-intuitive, promesse concrète) ; jamais par « Et », « Donc », « Concrètement » ni par une phrase qui dépend de ce qui précède.
+- Il se comprend seul, apporte une vraie valeur (explication, étape, technique) et finit sur une phrase complète.
+- Rétention : un changement d'image toutes les 2 à 4 secondes → découpe l'extrait en plans de 5 à 12 mots, sans changer le texte.
+Pour chaque extrait : "ch" (numéro du chapitre), "title" (50 caractères max, mot-clé en premier), "hook" (texte écran des 3 premières secondes, 3 à 6 mots, complète la 1re phrase sans la répéter), "description" (1 ou 2 phrases + une question pour les commentaires, sans hashtags), "hashtags" (5 ou 6 : 1 large, le mot-clé, des précis), "plans".
+- "plans" : [{"say": "texte exact", "title": "2 à 6 mots à l'écran", "img": "clé", "gfx": "", "hot": ["1 ou 2 mots exacts du say"]}]
+- "img" : une de ces clés : ${Object.keys(PACK).join(", ")}.
+- "gfx" (au plus 1 plan sur 3) : "card" ({"card": {"b": "10 mots max", "i": "source exacte"}}) · "check" ({"items": [{"t": "", "ok": true}]}) · "split" ({"left": {"label": "", "t": ""}, "right": {"label": "", "t": ""}}) · "quote" ({"quote": ""}) · "bigword" ({"word": "mot prononcé"}) · "stamp" ({"stamp": "FAUX"|"VRAI"|"MYTHE"}) · "count" ({"count": 3}) · "pulse" · "ring" (1er plan seulement) · "none".${ar ? "\n- Tous les textes affichés sont en arabe (titres, étiquettes, tampons)." : ""}
+Réponds UNIQUEMENT en JSON : {"clips": [{"ch": 1, "title": "", "hook": "", "description": "", "hashtags": "", "plans": []}]}`;
+}
+async function makeClips(i, btn) {
+  const r = i.r, yt = ytOf(i), fx = r.fx, ar = isAr(r), ids = fx.clips || [];
+  if (!(fx.voices || []).some(Boolean)) return toast("Voix des chapitres introuvables.");
+  if (!confirm(`Créer et programmer les Shorts de « ${r.name} » ?\nClaude choisit 3 à 5 extraits (≈ 1 min), le montage se fait tout seul (ta voix) et ils partent sur TikTok + YouTube, un tous les 2 jours à 18 h, avec le lien vers la vidéo complète.`)) return;
+  const old = btn.textContent; btn.disabled = true; btn.textContent = "Claude choisit les extraits…";
+  try {
+    let clips = [];
+    for (let t = 0; t < 2 && !clips.length; t++) {
+      const j = parseJSON((await api("gen", { prompt: clipsPrompt(r) })).text);
+      const seen = new Set();
+      clips = (j?.clips || []).map(c => ({ ...c, ch: +c.ch, plans: cleanPlans(c.plans, 16) }))
+        .filter(c => fx.voices[c.ch] && !seen.has(c.ch) && seen.add(c.ch) && clipOk(r, c)).slice(0, 5);
+    }
+    if (!clips.length) throw new Error("Claude n'a pas trouvé d'extrait exploitable, réessaie dans une minute.");
+    const lang = ar ? "عربي" : "Francais";
+    let d = new Date(Math.max(Date.now(), new Date(i.date || 0).getTime()));
+    for (const [n, c] of clips.entries()) {
+      btn.textContent = `Short ${n + 1}/${clips.length}…`;
+      d = new Date(d); d.setDate(d.getDate() + (n ? 2 : 1)); d.setHours(18, 0, 0, 0);
+      const up = await api("pfmup"); if (up.status >= 300 || !up.upload_url) throw new Error("stockage Post for Me indisponible");
+      const sc = { style: "r7", clipOf: r.id, music: fx.music || "calme", speed: 1.2, plans: c.plans };
+      const res = await api("create", { props: JSON.stringify({
+        Name: { title: [{ text: { content: String(c.title || r.name).slice(0, 100) } }] }, Script: rt(c.plans.map(p => p.say).join("\n\n")),
+        Description: rt(`${c.description || ""}\n\n▶ ${ar ? "الفيديو الكامل" : "Vidéo complète"} : ${yt}`), Hashtags: rt(c.hashtags), "Texte écran": rt(c.hook), "Scènes": rt(JSON.stringify(sc)),
+        Production: { select: { name: "Visuels IA" } }, Type: { select: { name: "Short" } }, Language: { select: { name: lang } }, Channel: { select: { name: ar ? "Dr Fehmi AR" : "Fehmi Tlaies FR" } },
+        "Pipeline Stage": { select: { name: "Scheduled" } }, "Statut publication": { select: { name: "En attente" } }, "Publish Date": { date: { start: d.toISOString() } },
+        Link: { url: up.media_url }, "Source URL": { url: yt }, "Promo app": { checkbox: !!r.promo }
+      }) });
+      const id = String(res.id || "").replace(/-/g, ""); if (!/^[0-9a-f]{32}$/.test(id)) throw new Error("création Notion refusée");
+      const job = { lang: ar ? "ar" : "fr", music: sc.music, sfx: true, speed: 1.2, voice: fx.voices[c.ch], plans: c.plans, upload: up.upload_url, endcard: ar ? "▶ الفيديو الكامل في قناتي" : "▶ La vidéo complète est sur ma chaîne" };
+      const rr = await api("render", { id, t: String(Math.floor(Date.now() / 1000)), ref: REF, job: await gzipB64(JSON.stringify(job)) });
+      if (!rr.ok) throw new Error("GitHub a refusé le montage d'un Short");
+      ids.push(id);
+    }
+    fx.clips = ids; await api("update", { id: r.id, props: JSON.stringify({ "Scènes": rt(JSON.stringify(fx)) }) });
+    toast(`${ids.length} Shorts en montage, programmés un tous les 2 jours à partir du ${fmtDate(new Date(Math.max(Date.now(), new Date(i.date || 0).getTime()) + 864e5))}.`, 7000);
+    loadTrack();
+  } catch (e) {
+    if (ids.length) { fx.clips = ids; api("update", { id: r.id, props: JSON.stringify({ "Scènes": rt(JSON.stringify(fx)) }) }).catch(() => {}); }
+    btn.disabled = false; btn.textContent = old; toast(e.message, 6000);
+  }
 }
 
 function r7Card(r) {
