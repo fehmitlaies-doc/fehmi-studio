@@ -174,7 +174,7 @@ h1{font-size:22px;margin:0}
 <script>
 const API = "https://hook.eu1.make.com/0jj57vomxlae4srwpwj6m74kdrkk24p2";
 // Mise à jour automatique : l'iPhone garde l'ancienne page en cache ; on compare avec la version en ligne et on recharge
-const BUILD = "2026-10-29.5";
+const BUILD = "2026-10-29.6";
 async function checkUpdate() {
   try {
     const t = await (await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" })).text();
@@ -253,6 +253,13 @@ async function load() {
 
 /* ---------- liste ---------- */
 const isAr = r => r.lang === "عربي";
+const AR_SAY = {
+  msa: "arabe standard simplifié (الفصحى المبسطة), compris dans tout le monde arabe (Maghreb, Égypte, Levant, Golfe) : vocabulaire de l'arabe courant des médias, AUCUN mot propre à un seul dialecte (ni tunisien, ni égyptien, ni levantin) ; ton parlé et chaleureux, jamais celui d'un journal télévisé : phrases courtes, tutoiement (أنت), mots courants plutôt que littéraires (« تقلق » plutôt que « يساورك القلق »), pas de tournures soutenues ni de mots rares ; écrit sans voyelles, sauf sur un mot qui risquerait d'être mal lu",
+  tn: "darija tunisienne naturelle et claire, pour un public tunisien et maghrébin : mots courants, sans mots français inutiles"
+};
+const arDia = () => AR_SAY[store.get("arDialect", "msa")] ? store.get("arDialect", "msa") : "msa";
+// voix : registre choisi ; textes écrits (titres, écran, description, hashtags, miniature) : toujours arabe simplifié, la langue des recherches
+const arSay = (d = arDia()) => AR_SAY[d] + ". Les textes ÉCRITS (titres, textes à l'écran, description, hashtags, tags, miniature) sont TOUJOURS en arabe standard simplifié, la langue que les gens tapent dans la recherche";
 const words = s => s.split(/\s+/).filter(Boolean).length;
 const secs = r => Math.max(5, Math.round(words(r.script) / (isAr(r) ? 2.2 : 2.5)));
 function render() {
@@ -428,7 +435,7 @@ const otherLang = r => isAr(r) ? "Francais" : "عربي";
 const trDone = store.get("tr", {});
 const trButton = r => !r || isEcran(r) || (!r.fx && r.script.length < 20) ? "" : trDone[r.id] ? `<span class="pill ok" style="align-self:center">✓ version ${isAr(r) ? "FR" : "AR"} créée</span>` : `<button class="ghost" data-tr="${r.id}">🌐 Créer en ${isAr(r) ? "français" : "arabe"}</button>`;
 function trPrompt(r, data, long = false) {
-  const to = isAr(r) ? "français parlé, tutoiement, phrases courtes" : "arabe tunisien (darija) naturel et clair, compréhensible dans tout le monde arabe";
+  const to = isAr(r) ? "français parlé, tutoiement, phrases courtes" : arSay();
   return `Tu adaptes une vidéo courte du Dr Fehmi (médecin, santé mentale) dans une autre langue : ${to}.
 Adaptation naturelle, pas du mot à mot : même sens, même structure, même ton, même nombre d'éléments. Ce qui est dit doit sonner comme écrit directement dans cette langue.
 N'ajoute AUCUNE information, aucun chiffre ni aucune affirmation absents de l'original ; garde les nuances (« souvent », « chez beaucoup »). Ne change JAMAIS : les sources (champ "i" des cartes, noms d'auteurs, revues, années), les chiffres, les valeurs de "img", "img_url", "gfx", "count", "seconds", "ok".
@@ -443,7 +450,8 @@ async function translateVideo(r, btn) {
   if (!r) return;
   if (isLong(r)) return translateLong(r, btn);
   const to = otherLang(r), lab = to === "عربي" ? "arabe" : "français";
-  if (!confirm(`Créer la version ${lab} de « ${r.name} » ?\nClaude l'adapte (≈ 1 min), puis elle arrive dans 🎬 Tourner : tu enregistres la voix (ou voix clonée) et elle sera programmée sur la chaîne ${to === "عربي" ? "arabe" : "française"}.`)) return;
+  const dia = to === "عربي" ? (arDia() === "tn" ? " (darija tunisienne)" : " (arabe simplifié, compris partout)") : "";
+  if (!confirm(`Créer la version ${lab}${dia} de « ${r.name} » ?\nClaude l'adapte (≈ 1 min), puis elle arrive dans 🎬 Tourner : tu enregistres la voix (ou voix clonée) et elle sera programmée sur la chaîne ${to === "عربي" ? "arabe" : "française"}.`)) return;
   const old = btn.textContent; btn.disabled = true; btn.textContent = "Claude adapte…";
   try {
     const base = { title: r.name, hook: r.hook, description: r.desc, hashtags: r.tags };
@@ -466,7 +474,7 @@ async function translateVideo(r, btn) {
       btn.textContent = "🩺 Relecture…";
       const check = await checkPlans(plans, `version ${lab} d'une vidéo courte animée : ${j.title || r.name}`);
       props.Script = rt(plans.map(p => p.say).join("\n\n"));
-      props["Scènes"] = rt(JSON.stringify({ ...r.fx, check, plans }));
+      props["Scènes"] = rt(JSON.stringify({ ...r.fx, check, dialect: to === "عربي" ? arDia() : undefined, plans }));
       props.Production = { select: { name: "Visuels IA" } };
     } else {
       btn.textContent = "🩺 Relecture…";
@@ -793,7 +801,7 @@ function parseJSON(t) {
 }
 function metaPrompt(r) {
   return `Tu écris le texte de publication TikTok/YouTube Shorts d'une vidéo face caméra du Dr Fehmi (médecin, santé mentale, arrêt du tabac, IA en santé).
-Langue : ${isAr(r) ? "arabe (darija tunisienne compréhensible, ou arabe simple)" : "français"}.
+Langue : ${isAr(r) ? "arabe standard simplifié (الفصحى المبسطة), compris dans tout le monde arabe, mots courants" : "français"}.
 ${r.promo ? "La vidéo promeut son app (Vague pour le tabac, Sursaut pour le temps d'écran, selon le sujet) : mentionne-la naturellement, « sur l'App Store », sans lien ni promesse." : ""}
 Référencement : la 1re phrase contient le mot-clé que les gens tapent sur ce sujet (de préférence une expression précise de longue traîne) ; hashtags = 1 ou 2 larges + le mot-clé + des hashtags précis, jamais seulement #fyp.
 N'ajoute aucune affirmation, aucun chiffre ni aucune promesse absents du script ; pas de diagnostic du lecteur.
@@ -804,7 +812,7 @@ Réponds UNIQUEMENT en JSON : {"description": "2 à 3 phrases accrocheuses + une
 function scriptsPrompt(o) {
   return `Tu es l'auteur des vidéos courtes du Dr Fehmi : médecin, santé mentale, anxiété, sommeil, arrêt du tabac, IA en santé. Il filme lui-même face caméra avec un prompteur.
 Écris ${o.n} script${o.n > 1 ? "s" : ""} DIFFÉRENTS sur : ${o.topic}
-Langue : ${o.lang === "عربي" ? "arabe (darija tunisienne naturelle, facile à lire au prompteur)" : "français parlé, phrases courtes"}.
+Langue : ${o.lang === "عربي" ? arSay() + " ; facile à lire au prompteur" : "français parlé, phrases courtes"}.
 Durée cible : ${o.sec} secondes à l'oral (~${Math.round(o.sec * 2.5)} mots).
 ${RETENTION}
 ${o.promo ? appRules(o.app || "Vague") : "Pas de promotion."}
@@ -839,7 +847,7 @@ const RETENTION = `Techniques de rétention à appliquer :
 - Texte écran (« hook ») : 3 à 6 mots qui créent un manque de curiosité, complémentaire à la phrase dite (pas identique), sans emoji, lisible en 1 seconde.`;
 function hooksPrompt(rows) {
   return `Tu écris le texte affiché à l'écran pendant les 3 premières secondes de vidéos courtes (TikTok / YouTube Shorts) du Dr Fehmi, médecin. Il sert aussi de miniature.
-Règles : 3 à 6 mots, dans la langue du script, crée un manque de curiosité ou nomme une douleur, complémentaire à la 1re phrase (pas identique), sans emoji, sans hashtag, pas de promesse médicale exagérée.
+Règles : 3 à 6 mots, dans la langue du script (en arabe : arabe standard simplifié, compris partout), crée un manque de curiosité ou nomme une douleur, complémentaire à la 1re phrase (pas identique), sans emoji, sans hashtag, pas de promesse médicale exagérée.
 ${rows.map(r => `ID ${r.id} | ${isAr(r) ? "arabe" : "français"} | Titre : ${r.name}\nDébut du script : ${r.script.slice(0, 500)}`).join("\n---\n")}
 Réponds UNIQUEMENT en JSON : {"<ID>": "texte écran", ...}`;
 }
@@ -887,13 +895,16 @@ $("#bNew").onclick = () => {
     <label>Sujet ou idée</label><textarea id="gTopic" rows="3" dir="auto" placeholder="ex. 3 mythes sur la nicotine">${esc(o.topic)}</textarea>
     <label>Mots-clés à viser (le 1er = principal, idéalement une expression précise)</label><input id="gKw" dir="auto" value="${esc((o.kw || []).join(", "))}" placeholder="Vide = Claude choisit le mot-clé le plus recherché">
     <div class="row"><div><label>Langue</label><select id="gLang"><option value="Francais">Français</option><option value="عربي">عربي</option></select></div>
+      <div id="gDiaBox"><label>Arabe parlé</label><select id="gDia"><option value="msa">Simplifié (tout le monde arabe)</option><option value="tn">Tunisien (Maghreb)</option></select></div>
       <div><label>Combien</label><select id="gN">${[1, 2, 3, 4, 5].map(n => `<option>${n}</option>`).join("")}</select></div>
       <div><label>Durée</label><select id="gSec"><option value="30">30 s</option><option value="45">45 s</option><option value="60">60 s</option><option value="90">90 s</option></select></div></div>
     <label style="display:flex;gap:8px;align-items:center;color:var(--txt)"><input type="checkbox" id="gPromo" style="width:auto"> Promo de mon app <select id="gApp" style="width:auto;padding:4px 8px;margin-left:4px"><option>Vague</option><option>Sursaut</option></select> (coche « Votre marque »)</label>
     <div class="row" style="margin-top:18px"><button class="ghost" id="gCancel">Annuler</button><button class="pri" id="gGo">Écrire</button></div>
     <div id="gOut"></div>
   </div></div>`;
-  $("#gLang").value = o.lang; $("#gN").value = o.n; $("#gSec").value = o.sec; $("#gPromo").checked = o.promo;
+  $("#gDia").value = arDia(); $("#gDia").onchange = e => store.set("arDialect", e.target.value);
+  const diaShow = () => $("#gDiaBox").hidden = $("#gLang").value !== "عربي"; $("#gLang").addEventListener("change", diaShow);
+  $("#gLang").value = o.lang; diaShow(); $("#gN").value = o.n; $("#gSec").value = o.sec; $("#gPromo").checked = o.promo;
   $("#gApp").value = o.app || "Vague";
   $("#gIdeas").onclick = () => toggleIdeas();
   let mode = o.mode || "cam";
@@ -1170,7 +1181,7 @@ const SCENE_RULES = `Règles des scènes (rétention maximale) :
 function facelessPrompt(o) {
   return `Tu écris des vidéos courtes SANS VISAGE (voix off + illustrations animées) pour le Dr Fehmi, médecin : santé mentale, anxiété, sommeil, arrêt du tabac, IA en santé. La voix off est la sienne.
 Écris ${o.n} vidéo${o.n > 1 ? "s" : ""} DIFFÉRENTE${o.n > 1 ? "S" : ""} sur : ${o.topic}
-Langue de la voix off : ${o.lang === "عربي" ? "arabe tunisien (darija) naturel et clair" : "français parlé, tutoiement"}.
+Langue de la voix off : ${o.lang === "عربي" ? arSay() : "français parlé, tutoiement"}.
 Durée : ${o.sec} secondes (~${Math.round(o.sec * 2.4)} mots au total).
 ${RETENTION}
 Découpe en ${Math.max(6, Math.round(o.sec / 5.5))} à ${Math.round(o.sec / 4.5)} scènes.
@@ -1276,7 +1287,7 @@ function r7Prompt(o) {
   return `Tu es le scénariste du Dr Fehmi, médecin psychiatre (psychologie du quotidien, santé mentale, addictions). Vidéo courte SANS VISAGE : sa voix + motion design au style ambre avec un personnage unique. Objectif : AIDER vraiment avec une technique prouvée, et garder l'attention jusqu'à la dernière seconde.
 Sujet : ${o.topic}
 ${o.version ? `Version retenue (à suivre fidèlement, avec tes propres mots) : ${o.version}` : ""}
-Langue de la voix off : ${o.lang === "ar" ? "arabe tunisien (darija) naturel et clair, compréhensible dans tout le monde arabe" : "français parlé, tutoiement, phrases courtes"}.
+Langue de la voix off : ${o.lang === "ar" ? arSay(o.dialect) : "français parlé, tutoiement, phrases courtes"}.
 ${o.promo ? appRules(o.app || "Vague") + "\n" : ""}${seoRules(o)}
 
 TECHNIQUES PROUVÉES (choisis LA plus adaptée au sujet, explique-la précisément, étapes concrètes ; cite uniquement sa source, telle quelle) :
@@ -1330,7 +1341,7 @@ Vérifie CHAQUE affirmation de chaque élément. Corrige seulement le FOND, jama
 Sources autorisées (techniques validées, vérifiées sur PubMed) :
 ${TECHNIQUES.map(t => `- ${t.nom} : ${t.preuve}. Source : ${t.source}`).join("\n")}
 Faits exacts sur les apps du Dr Fehmi (à ne pas corriger s'ils sont repris tels quels) : ${Object.entries(APPS).map(([k, v]) => k + " : " + v).join(" ")}
-Une correction garde la même langue, le même ton parlé, une longueur proche (pas plus longue), et si possible les mots listés dans "garder". Si une affirmation ne peut pas être rendue exacte, remplace-la par une phrase exacte et utile sur le même point. Ne touche pas aux éléments justes.
+Une correction garde la même langue et le même registre (arabe simplifié ou darija, selon le texte), le même ton parlé, une longueur proche (pas plus longue), et si possible les mots listés dans "garder". Si une affirmation ne peut pas être rendue exacte, remplace-la par une phrase exacte et utile sur le même point. Ne touche pas aux éléments justes.
 Éléments (JSON) :
 ${JSON.stringify(items)}
 Réponds UNIQUEMENT en JSON : {"fixes": [{"id": "id de l'élément", "t": "texte corrigé", "why": "erreur corrigée, en 12 mots max"}]} — "fixes": [] si tout est exact.`;
@@ -1402,7 +1413,7 @@ async function createR7(o, tries = 2) {
   const res = await api("create", { props: JSON.stringify({
     Name: { title: [{ text: { content: String(j.title || o.topic).slice(0, 200) } }] },
     Script: rt(plans.map(p => p.say).join("\n\n")), Description: rt(j.description), Hashtags: rt(j.hashtags), "Texte écran": rt(j.hook || plans[0].title),
-    "Scènes": rt(JSON.stringify({ style: "r7", ghost: String(j.ghost || "").slice(0, 20), music: MUSICS[j.music] ? j.music : "calme", technique: String(j.technique || ""), check, plans })), Production: { select: { name: "Visuels IA" } },
+    "Scènes": rt(JSON.stringify({ style: "r7", ghost: String(j.ghost || "").slice(0, 20), music: MUSICS[j.music] ? j.music : "calme", technique: String(j.technique || ""), ...(o.lang === "ar" ? { dialect: o.dialect || arDia() } : {}), check, plans })), Production: { select: { name: "Visuels IA" } },
     Type: { select: { name: "Short" } }, Language: { select: { name: lang } }, Channel: { select: { name: lang === "عربي" ? "Dr Fehmi AR" : "Fehmi Tlaies FR" } },
     "Pipeline Stage": { select: { name: "Script" } }, "Promo app": { checkbox: !!o.promo }, ...(o.link ? { "Source URL": { url: o.link } } : {})
   }) });
@@ -1410,7 +1421,7 @@ async function createR7(o, tries = 2) {
 }
 /* ---------- vidéos longues YouTube (16:9) : plan validé par Fehmi, puis chapitres écrits par Claude ---------- */
 const LONG_WPM = 110;  // mots par minute une fois montée (voix posée, accélérée de 10 %)
-const longLang = o => o.lang === "ar" ? "arabe tunisien (darija) clair, compréhensible dans tout le monde arabe, mots simples" : "français parlé, tutoiement, phrases courtes";
+const longLang = o => o.lang === "ar" ? arSay(o.dialect) : "français parlé, tutoiement, phrases courtes";
 function longOutlinePrompt(o) {
   const words = Math.round(o.min * LONG_WPM);
   return `Tu es le scénariste YouTube du Dr Fehmi, médecin psychiatre (santé mentale, psychologie du quotidien, addictions). Vidéo LONGUE (${o.min} minutes, 16:9) pensée pour le RÉFÉRENCEMENT YouTube et Google (recherche, pas viralité) : sa voix + motion design ambre avec un personnage unique.
@@ -1507,7 +1518,7 @@ async function longWrite(opt, out) {
     b.textContent = "🩺 Relecture scientifique…";
     const check = await checkPlans(plans, `vidéo YouTube longue en ${opt.lang === "ar" ? "arabe" : "français"} : ${out.title}`);
     const lang = opt.lang === "ar" ? "عربي" : "Francais";
-    const fx = { style: "long", lang: opt.lang, kw: opt.kw || [], technique: String(out.technique || ""), music: "calme", speed: 1.1,
+    const fx = { style: "long", lang: opt.lang, ...(opt.lang === "ar" ? { dialect: arDia() } : {}), kw: opt.kw || [], technique: String(out.technique || ""), music: "calme", speed: 1.1,
       chapters: out.chapters.map(c => String(c.t || "").slice(0, 90)), tags: String(out.tags || "").slice(0, 500), desc0: String(out.description || "").slice(0, 1800), thumb: String(out.thumb || "").slice(0, 40), hl: String(out.hl || "").slice(0, 20), pose: POSES[out.pose] ? out.pose : "point", check, plans, voices: [] };
     await api("create", { props: JSON.stringify({
       Name: { title: [{ text: { content: String(out.title || opt.topic).slice(0, 100) } }] },
@@ -1728,7 +1739,8 @@ function publishLong(r) {
 // version dans l'autre langue : chaque chapitre adapté par Claude, mêmes images et animations, voix à réenregistrer
 async function translateLong(r, btn) {
   const to = otherLang(r), lab = to === "عربي" ? "arabe" : "français", fx = r.fx;
-  if (!confirm(`Créer la version ${lab} de cette vidéo longue ?\nClaude adapte chaque chapitre (≈ 2 min), puis tu enregistres ta voix chapitre par chapitre ; elle sera publiée sur la chaîne YouTube ${lab === "arabe" ? "arabe" : "française"}.`)) return;
+  const dia = to === "عربي" ? (arDia() === "tn" ? " (darija tunisienne)" : " (arabe simplifié, compris partout)") : "";
+  if (!confirm(`Créer la version ${lab}${dia} de cette vidéo longue ?\nClaude adapte chaque chapitre (≈ 2 min), puis tu enregistres ta voix chapitre par chapitre ; elle sera publiée sur la chaîne YouTube ${lab === "arabe" ? "arabe" : "française"}.`)) return;
   const old = btn.textContent; btn.disabled = true; btn.textContent = "Claude adapte…";
   try {
     const meta = parseJSON((await api("gen", { prompt: trPrompt(r, { title: r.name, description: fx.desc0 || r.desc, hashtags: r.tags, tags: fx.tags || "", chapters: fx.chapters }, true) })).text);
@@ -1744,7 +1756,7 @@ async function translateLong(r, btn) {
     const plans = res.flat();
     btn.textContent = "🩺 Relecture…";
     const check = await checkPlans(plans, `version ${lab} d'une vidéo YouTube longue : ${meta.title}`);
-    const nfx = { ...fx, check, lang: to === "عربي" ? "ar" : "fr", chapters: fx.chapters.map((c, k) => String(meta.chapters[k] || c).slice(0, 90)), tags: String(meta.tags || "").slice(0, 500), desc0: String(meta.description || "").slice(0, 1800), plans, voices: [], chaptersAt: [] };
+    const nfx = { ...fx, check, lang: to === "عربي" ? "ar" : "fr", dialect: to === "عربي" ? arDia() : undefined, chapters: fx.chapters.map((c, k) => String(meta.chapters[k] || c).slice(0, 90)), tags: String(meta.tags || "").slice(0, 500), desc0: String(meta.description || "").slice(0, 1800), plans, voices: [], chaptersAt: [] };
     await api("create", { props: JSON.stringify({
       Name: { title: [{ text: { content: String(meta.title).slice(0, 100) } }] },
       Script: rt(nfx.chapters.map((c, k) => `## ${c}\n\n` + plans.filter(p => p.ch === k).map(p => p.say).join("\n\n")).join("\n\n")),
