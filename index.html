@@ -174,7 +174,7 @@ h1{font-size:22px;margin:0}
 <script>
 const API = "https://hook.eu1.make.com/0jj57vomxlae4srwpwj6m74kdrkk24p2";
 // Mise à jour automatique : l'iPhone garde l'ancienne page en cache ; on compare avec la version en ligne et on recharge
-const BUILD = "2026-10-29.3";
+const BUILD = "2026-10-29.4";
 async function checkUpdate() {
   try {
     const t = await (await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" })).text();
@@ -1349,7 +1349,7 @@ RÈGLES SPÉCIFIQUES VIDÉO LONGUE :
 - Total : environ ${words} mots (répartis dans "words").
 TECHNIQUES PROUVÉES :
 ${TECHNIQUES.map(t => `- [${t.id}] ${t.nom} — pour : ${t.pour}. Étapes : ${t.etapes}. Ce que l'étude montre : ${t.preuve}. Source : ${t.source}`).join("\n")}
-Réponds UNIQUEMENT en JSON : {"title": "titre YouTube, mot-clé en premier, 70 caractères max", "description": "4 à 6 phrases : la 1re contient le mot-clé principal ; résumé de ce qu'on apprend ; sans hashtags", "hashtags": "3 à 5 hashtags", "tags": "12 à 15 tags YouTube séparés par des virgules : mot-clé, variantes, longues traînes, questions", "technique": "id", "thumb": "texte de la MINIATURE : 2 à 4 mots percutants (émotion, curiosité, bénéfice), qui COMPLÈTENT le titre sans le répéter, ${o.lang === "ar" ? "en arabe" : "en français"}", "hl": "le mot de la miniature à colorer en ambre", "chapters": [{"t": "titre du chapitre", "q": "question exacte tapée par les gens", "points": ["idée 1", "idée 2", "idée 3"], "words": 150}]}`;
+Réponds UNIQUEMENT en JSON : {"title": "titre YouTube, mot-clé en premier, 70 caractères max", "description": "4 à 6 phrases : la 1re contient le mot-clé principal ; résumé de ce qu'on apprend ; sans hashtags", "hashtags": "3 à 5 hashtags", "tags": "12 à 15 tags YouTube séparés par des virgules : mot-clé, variantes, longues traînes, questions", "technique": "id", "thumb": "texte de la MINIATURE : 2 à 4 mots percutants (émotion, curiosité, bénéfice), qui COMPLÈTENT le titre sans le répéter, honnêtes (la vidéo tient la promesse : jamais « CHOC », « INCROYABLE » ni de peur exagérée), ${o.lang === "ar" ? "en arabe" : "en français"}", "hl": "le mot de la miniature à colorer en ambre", "pose": "expression du Dr Fehmi sur la miniature, adaptée à l'émotion du sujet sans exagérer : ${Object.entries(POSES).map(([k, v]) => k + " (" + v + ")").join(", ")}", "chapters": [{"t": "titre du chapitre", "q": "question exacte tapée par les gens", "points": ["idée 1", "idée 2", "idée 3"], "words": 150}]}`;
 }
 const LONG_GFX = `"gfx" (au plus 1 plan sur 2, varie, jamais deux fois le même d'affilée) : "card" ("card": {"b": "ce que l'étude montre en 10 mots max", "i": "la source exacte"}) · "check" ("items": [{"t": "3-6 mots", "ok": true|false}] 2 ou 3) · "split" ("left": {"label": "MYTHE" ou "AVANT", "t": "4-8 mots"}, "right": {"label": "VÉRITÉ" ou "APRÈS", "t": "4-8 mots"}) · "quote" ("quote": phrase à retenir, 14 mots max) · "count" ("count": nombre d'étapes) · "breath" ("steps": 2-3 étiquettes en MAJUSCULES dont le dernier mot est prononcé) · "bigword" ("word": UN mot prononcé dans le plan) · "stamp" ("stamp": "FAUX", "VRAI" ou "MYTHE", prononcé dans le plan) · "timer" ("seconds": 3 à 10) · "ecg" · "pulse" · "ring" (intro seulement) · "cta" ("cta": mot à écrire en commentaire, conclusion seulement) · "none".`;
 function longChapterPrompt(o, out, k) {
@@ -1427,7 +1427,7 @@ async function longWrite(opt, out) {
     const plans = res.flatMap((ps, k) => ps.map(p => ({ ...p, ch: k })));
     const lang = opt.lang === "ar" ? "عربي" : "Francais";
     const fx = { style: "long", lang: opt.lang, kw: opt.kw || [], technique: String(out.technique || ""), music: "calme", speed: 1.1,
-      chapters: out.chapters.map(c => String(c.t || "").slice(0, 90)), tags: String(out.tags || "").slice(0, 500), desc0: String(out.description || "").slice(0, 1800), thumb: String(out.thumb || "").slice(0, 40), hl: String(out.hl || "").slice(0, 20), plans, voices: [] };
+      chapters: out.chapters.map(c => String(c.t || "").slice(0, 90)), tags: String(out.tags || "").slice(0, 500), desc0: String(out.description || "").slice(0, 1800), thumb: String(out.thumb || "").slice(0, 40), hl: String(out.hl || "").slice(0, 20), pose: POSES[out.pose] ? out.pose : "point", plans, voices: [] };
     await api("create", { props: JSON.stringify({
       Name: { title: [{ text: { content: String(out.title || opt.topic).slice(0, 100) } }] },
       Script: rt(fx.chapters.map((c, k) => `## ${k ? k + ". " : ""}${c}\n\n` + plans.filter(p => p.ch === k).map(p => p.say).join("\n\n")).join("\n\n")),
@@ -1535,55 +1535,67 @@ function loadThumbFonts() {
   }));
 }
 // le texte de la miniature complète le titre (il ne le répète pas) : Claude le propose avec le plan, sinon on le tire du mot-clé
+// poses (photos générées à partir de ta photo) : l'expression doit correspondre à l'émotion du sujet, sans exagérer
+const POSES = { smile: "sourire, regard caméra", point: "montre le texte du doigt", think: "pensif, main sous le menton", surprise: "étonné (sourcils levés)", calm: "rassurant, paume ouverte", serious: "sérieux, bras croisés", stop: "main levée « stop »" };
+const POSE_FLIP = { point: true };  // la photo d'origine montre vers la droite : retournée quand le texte est à gauche
 const thumbText = r => r.fx.thumb || (r.fx.kw?.[0] || r.name.split(/[:?!–-]/)[0]).split(/\s+/).slice(0, 4).join(" ");
-async function drawThumb(r, text, hl) {
+async function drawThumb(r, text, hl, pose) {
   await loadThumbFonts();
   const ar = isAr(r), W = 1280, H = 720, c = document.createElement("canvas"); c.width = W; c.height = H;
   const g = c.getContext("2d"), font = ar ? "ThumbAr" : "ThumbLa";
+  pose = POSES[pose] ? pose : "point";
   g.fillStyle = "#17121C"; g.fillRect(0, 0, W, H);
-  // image du sujet en fond, très sombre, côté texte : chaque miniature reste reconnaissable
+  // image du sujet en fond, très sombre : chaque miniature reste reconnaissable sans voler la vedette au texte
   const key = r.fx.thumbImg || r.fx.plans.find(p => PACK[p.img])?.img;
   if (key) try {
     const im = await loadImg(`radar/pack/${key}.jpg`), s = Math.max(W / im.width, H / im.height);
-    g.globalAlpha = .42; g.drawImage(im, (W - im.width * s) / 2, (H - im.height * s) / 2, im.width * s, im.height * s); g.globalAlpha = 1;
+    g.globalAlpha = .38; g.drawImage(im, (W - im.width * s) / 2, (H - im.height * s) / 2, im.width * s, im.height * s); g.globalAlpha = 1;
   } catch {}
   const side = g.createLinearGradient(ar ? W : 0, 0, ar ? 0 : W, 0);
-  side.addColorStop(0, "rgba(23,18,28,.55)"); side.addColorStop(.5, "rgba(23,18,28,.75)"); side.addColorStop(1, "rgba(23,18,28,.92)");
+  side.addColorStop(0, "rgba(23,18,28,.6)"); side.addColorStop(.5, "rgba(23,18,28,.78)"); side.addColorStop(1, "rgba(23,18,28,.92)");
   g.fillStyle = side; g.fillRect(0, 0, W, H);
-  // halo ambre derrière le visage
-  const px = ar ? 330 : W - 330, glow = g.createRadialGradient(px, 300, 40, px, 330, 470);
+  // photo : zone réservée au bord (droite en français, gauche en arabe), le texte n'y entre jamais
+  let me = null; try { me = await loadImg(`radar/pack/${pose === "smile" ? "fehmi" : "fehmi-" + pose}.webp`); } catch {}
+  const s = me ? Math.min(700 / me.height, 560 / me.width) : 1, pw = me ? me.width * s : 480, ph = me ? me.height * s : 700;
+  const px = ar ? -20 : W - pw + 20, cx = px + pw / 2;
+  const glow = g.createRadialGradient(cx, H - ph * .62, 30, cx, H - ph * .55, 440);
   glow.addColorStop(0, "rgba(242,165,65,.55)"); glow.addColorStop(.55, "rgba(242,165,65,.12)"); glow.addColorStop(1, "rgba(242,165,65,0)");
   g.fillStyle = glow; g.fillRect(0, 0, W, H);
-  // photo : grand visage, coupée en bas, contour lumineux ambre
-  try {
-    const me = await loadImg("radar/pack/fehmi.webp"), h = 730, w = me.width * h / me.height, x = ar ? -40 : W - w + 40;
-    g.save(); g.shadowColor = "rgba(242,165,65,.9)"; g.shadowBlur = 38; g.drawImage(me, x, H - h + 30, w, h); g.restore();
-    g.drawImage(me, x, H - h + 30, w, h);
-  } catch {}
-  // badge d'autorité
-  const badge = ar ? "د. فهمي · طبيب نفسي" : "DR FEHMI · PSYCHIATRE";
-  g.font = `800 30px ${font}`; g.direction = ar ? "rtl" : "ltr"; g.textAlign = ar ? "right" : "left"; g.textBaseline = "middle";
-  const bw = g.measureText(badge).width + 40, bx = ar ? W - 56 - bw : 56;
-  g.fillStyle = "#F2A541"; g.beginPath(); g.roundRect(bx, 50, bw, 56, 28); g.fill();
-  g.fillStyle = "#17121C"; g.fillText(badge, ar ? bx + bw - 20 : bx + 20, 79);
-  // texte : 2 à 4 mots, majuscules, taille ajustée pour occuper la zone gauche (droite en arabe)
-  const words = String(text || "").trim().split(/\s+/).filter(Boolean).slice(0, 6).map(w => ar ? w : w.toUpperCase());
+  if (me) {
+    const flip = POSE_FLIP[pose] && !ar;
+    const put = () => { g.save(); if (flip) { g.translate(px + pw, 0); g.scale(-1, 1); g.drawImage(me, 0, H - ph, pw, ph); } else g.drawImage(me, px, H - ph, pw, ph); g.restore(); };
+    g.save(); g.shadowColor = "rgba(242,165,65,.85)"; g.shadowBlur = 34; put(); g.restore(); put();
+  }
+  // zone de texte : entre la marge et la photo (40 px d'écart), au-dessus du coin de la durée YouTube
+  const z0 = ar ? px + pw + 40 : 60, z1 = ar ? W - 60 : px - 40, maxW = z1 - z0;
+  g.direction = ar ? "rtl" : "ltr"; g.textAlign = ar ? "right" : "left"; g.textBaseline = "middle";
+  const xa = ar ? z1 : z0;
+  // signature discrète, toujours la même : la chaîne devient reconnaissable dans les recherches
+  const badge = ar ? "د. فهمي" : "DR FEHMI";
+  g.font = `800 30px ${font}`; const bw = g.measureText(badge).width + 40, bx = ar ? z1 - bw : z0;
+  g.fillStyle = "#F2A541"; g.beginPath(); g.roundRect(bx, 52, bw, 54, 27); g.fill();
+  g.fillStyle = "#17121C"; g.fillText(badge, ar ? bx + bw - 20 : bx + 20, 80);
+  // texte : 2 à 4 mots, très gros (lisible sur téléphone), 3 lignes max
+  // la ponctuation isolée (« : », « ? ») reste collée au mot d'avant
+  const words = String(text || "").trim().split(/\s+/).filter(Boolean).reduce((a, w) => (/^[\p{P}\p{S}]+$/u.test(w) && a.length ? a[a.length - 1] += " " + w : a.push(w), a), []).slice(0, 6).map(w => ar ? w : w.toUpperCase());
+  c.warn = words.length > 4 ? "Plus de 4 mots : raccourcis pour qu'elle reste lisible sur téléphone." : "";
   if (!words.length) return c;
-  const maxW = 600, maxH = 470, hot = new Set(normW(hl || "").filter(t => t.length > 1));
-  let size = 170, lines = [];
-  for (; size > 56; size -= 6) {
+  const top = 140, maxH = H - top - 110, hot = new Set(normW(hl || "").filter(t => t.length > 1));
+  let size = 170, lines = [], lh = 0;
+  for (; size >= 64; size -= 4) {
     g.font = `900 ${size}px ${font}`; lines = [];
     for (const w of words) {
       const last = lines[lines.length - 1];
       if (last && g.measureText(last.concat(w).join(" ")).width <= maxW) last.push(w); else lines.push([w]);
     }
-    const lh = size * (ar ? 1.25 : 1.02);
+    lh = size * (ar ? 1.3 : 1.04);
     if (lines.length <= 3 && lines.every(l => g.measureText(l.join(" ")).width <= maxW) && lines.length * lh <= maxH) break;
   }
-  const lh = size * (ar ? 1.25 : 1.02), top = 130 + (maxH - lines.length * lh) / 2 + lh / 2, x0 = ar ? W - 64 : 64;
+  if (size < 64) c.warn = "Texte trop long pour la miniature : 2 à 4 mots courts.";
+  const y0 = top + (maxH - lines.length * lh) / 2 + lh / 2;
   g.lineJoin = "round"; g.lineWidth = Math.round(size / 9); g.strokeStyle = "#0B080E";
   lines.forEach((l, i) => {
-    let x = x0; const y = top + i * lh, sp = g.measureText(" ").width;
+    let x = xa; const y = y0 + i * lh, sp = g.measureText(" ").width;
     for (const w of l) {
       const ww = g.measureText(w).width;
       g.save(); g.shadowColor = "rgba(0,0,0,.6)"; g.shadowBlur = 24; g.strokeText(w, x, y); g.restore();
@@ -1602,18 +1614,21 @@ function publishLong(r) {
     <label>Miniature</label><div id="tPrev" style="aspect-ratio:16/9;border-radius:12px;overflow:hidden;background:#17121C"></div>
     <div class="row"><div style="flex:2"><label>Texte (2 à 4 mots)</label><input id="tText" dir="auto" maxlength="40" value="${esc(thumbText(r))}"></div>
       <div><label>Mot en ambre</label><input id="tHl" dir="auto" maxlength="20" value="${esc(r.fx.hl || "")}"></div></div>
-    <label>Image de fond</label><select id="tImg">${Object.entries(PACK).map(([k, v]) => `<option value="${k}" ${(r.fx.thumbImg || r.fx.plans.find(p => PACK[p.img])?.img) === k ? "selected" : ""}>${esc(v)}</option>`).join("")}</select>
+    <div id="tWarn" class="small" style="color:var(--warn)"></div>
+    <div class="row"><div><label>Ton expression</label><select id="tPose">${Object.entries(POSES).map(([k, v]) => `<option value="${k}" ${(r.fx.pose || "point") === k ? "selected" : ""}>${esc(v)}</option>`).join("")}</select></div>
+    <div><label>Image de fond</label><select id="tImg">${Object.entries(PACK).map(([k, v]) => `<option value="${k}" ${(r.fx.thumbImg || r.fx.plans.find(p => PACK[p.img])?.img) === k ? "selected" : ""}>${esc(v)}</option>`).join("")}</select></div></div>
     <label>Date et heure de publication</label><input type="datetime-local" id="lDate" value="${localInput(d0)}">
     <div class="row" style="margin-top:14px"><button class="ghost" id="lpClose">Fermer</button><button class="pri" id="lpGo">🚀 Programmer</button></div>
   </div></div>`;
   let cv = null, seq = 0;
   const redraw = async () => {
-    const n = ++seq; r.fx.thumb = $("#tText").value.trim(); r.fx.hl = $("#tHl").value.trim(); r.fx.thumbImg = $("#tImg").value;
-    const c = await drawThumb(r, r.fx.thumb, r.fx.hl); if (n !== seq || !$("#tPrev")) return;
+    const n = ++seq; r.fx.thumb = $("#tText").value.trim(); r.fx.hl = $("#tHl").value.trim(); r.fx.thumbImg = $("#tImg").value; r.fx.pose = $("#tPose").value;
+    const c = await drawThumb(r, r.fx.thumb, r.fx.hl, r.fx.pose); if (n !== seq || !$("#tPrev")) return;
+    $("#tWarn").textContent = c.warn || "";
     cv = c; c.style.cssText = "width:100%;height:100%;display:block"; $("#tPrev").replaceChildren(c);
   };
   let tm; ["tText", "tHl"].forEach(id => $("#" + id).oninput = () => { clearTimeout(tm); tm = setTimeout(redraw, 250); });
-  $("#tImg").onchange = redraw; redraw();
+  $("#tImg").onchange = $("#tPose").onchange = redraw; redraw();
   $("#lpClose").onclick = () => $("#sheet").innerHTML = "";
   $("#lpGo").onclick = async () => {
     const d = new Date($("#lDate").value); if (isNaN(d)) return toast("Date invalide");
