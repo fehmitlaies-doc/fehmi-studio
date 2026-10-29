@@ -13,9 +13,19 @@ def get(url, dest):
         shutil.copyfileobj(r, f)
 
 # voix : mono 48 kHz, volume harmonisé (la voix elle-même n'est pas modifiée)
-get(job['voice'], f'{D}/assets/voice.src')
-subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', f'{D}/assets/voice.src', '-vn', '-ac', '1', '-ar', '48000',
-                '-af', f"atempo={min(1.35, max(1.0, float(job.get('speed') or 1))):.2f},loudnorm=I=-16:TP=-1.5:LRA=11", '-c:a', 'aac', '-b:a', '192k', f'{D}/assets/voice.m4a'], check=True)
+AF = f"atempo={min(1.35, max(1.0, float(job.get('speed') or 1))):.2f},loudnorm=I=-16:TP=-1.5:LRA=11"
+if job.get('voices'):  # vidéo longue : un enregistrement par chapitre, mis bout à bout avec 1 s de silence
+    parts = []
+    for k, u in enumerate(job['voices']):
+        get(u, f'{D}/assets/v{k}.src')
+        subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', f'{D}/assets/v{k}.src', '-vn', '-ac', '1', '-ar', '48000', '-af', AF + ',apad=pad_dur=1', '-c:a', 'pcm_s16le', f'{D}/assets/v{k}.wav'], check=True)
+        parts.append(f'{D}/assets/v{k}.wav')
+    open(f'{D}/assets/voices.txt', 'w').write(''.join(f"file '{os.path.abspath(x)}'\n" for x in parts))
+    subprocess.run(['ffmpeg', '-v', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', f'{D}/assets/voices.txt', '-c:a', 'aac', '-b:a', '192k', f'{D}/assets/voice.m4a'], check=True)
+else:
+    get(job['voice'], f'{D}/assets/voice.src')
+    subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', f'{D}/assets/voice.src', '-vn', '-ac', '1', '-ar', '48000',
+                    '-af', AF, '-c:a', 'aac', '-b:a', '192k', f'{D}/assets/voice.m4a'], check=True)
 
 names = {f[:-4] for f in os.listdir(PACK) if f.endswith('.jpg')}
 for i, p in enumerate(job['plans']):

@@ -174,7 +174,7 @@ h1{font-size:22px;margin:0}
 <script>
 const API = "https://hook.eu1.make.com/0jj57vomxlae4srwpwj6m74kdrkk24p2";
 // Mise à jour automatique : l'iPhone garde l'ancienne page en cache ; on compare avec la version en ligne et on recharge
-const BUILD = "2026-10-28.2";
+const BUILD = "2026-10-29.1";
 async function checkUpdate() {
   try {
     const t = await (await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" })).text();
@@ -237,7 +237,7 @@ function row(p) {
     link: pr.Link?.url || "",
     src: pr["Source URL"]?.url || "",
     cost: pr["Coût ($)"]?.number ?? null,
-    fx: (() => { try { const j = JSON.parse(plain(pr["Scènes"]?.rich_text) || "null"); return j && ((Array.isArray(j.scenes) && j.scenes.length) || ((j.style === "r7" || j.style === "ecran") && Array.isArray(j.plans) && j.plans.length)) ? j : null; } catch { return null; } })()
+    fx: (() => { try { const j = JSON.parse(plain(pr["Scènes"]?.rich_text) || "null"); return j && ((Array.isArray(j.scenes) && j.scenes.length) || ((["r7", "ecran", "long"].includes(j.style)) && Array.isArray(j.plans) && j.plans.length)) ? j : null; } catch { return null; } })()
   };
 }
 async function load() {
@@ -271,7 +271,7 @@ function render() {
   const rows = S.rows.filter(r => S.lang === "all" || r.lang === S.lang);
   $("#list").innerHTML = S.loading ? `<div class="empty">Chargement des scripts…</div>` :
     !rows.length ? `<div class="empty">Aucun script à tourner. Appuie sur « ＋ Scripts ».</div>` :
-    rows.map(r => isEcran(r) ? ecranCard(r) : isR7(r) ? r7Card(r) : `<div class="card">
+    rows.map(r => isLong(r) ? longCard(r) : isEcran(r) ? ecranCard(r) : isR7(r) ? r7Card(r) : `<div class="card">
       ${r.fx ? `<span style="width:24px;flex:none;text-align:center" aria-hidden="true">🎞</span>` : `<input type="checkbox" data-sel="${r.id}" ${S.sel.has(r.id) ? "checked" : ""} aria-label="Ajouter au tournage">`}
       <div class="b"><div class="t" dir="auto" data-edit="${r.id}">${esc(r.name)} <span class="small">✎</span></div>
         <div class="meta"><span class="pill">${isAr(r) ? "AR" : r.lang === "Francais" ? "FR" : esc(r.lang || "?")}</span>
@@ -289,9 +289,10 @@ $("#langSeg").onclick = e => { const l = e.target.dataset.l; if (!l) return; S.l
 $("#list").onclick = e => {
   const c = e.target.closest("[data-sel]"); if (c) { c.checked ? S.sel.add(c.dataset.sel) : S.sel.delete(c.dataset.sel); render(); return; }
   const g = e.target.closest("[data-one]"); if (g) openPlan([g.dataset.one]);
-  const pb = e.target.closest("[data-pub]"); if (pb) { const r = S.rows.find(x => x.id === pb.dataset.pub); isR7(r) ? publishR7(r) : publishFx(r); return; }
+  const pb = e.target.closest("[data-pub]"); if (pb) { const r = S.rows.find(x => x.id === pb.dataset.pub); isLong(r) ? publishLong(r) : isR7(r) ? publishR7(r) : publishFx(r); return; }
   const tr = e.target.closest("[data-tr]"); if (tr) { translateVideo(S.rows.find(x => x.id === tr.dataset.tr), tr); return; }
   const ec = e.target.closest("[data-ecran]"); if (ec) { openEcran(S.rows.find(x => x.id === ec.dataset.ecran)); return; }
+  const lg = e.target.closest("[data-long]"); if (lg) { const r = S.rows.find(x => x.id === lg.dataset.long); rx.get(r?.id) && !rx.get(r.id).done ? watchRender(r, true) : openLong(r); return; }
   const vo = e.target.closest("[data-voice]"); if (vo) { openVoice(S.rows.find(r => r.id === vo.dataset.voice)); return; }
   const rw = e.target.closest("[data-rwait]"); if (rw) { const r = S.rows.find(x => x.id === rw.dataset.rwait); if (r) watchRender(r, true); return; }
   const mk = e.target.closest("[data-make]"); if (mk) makeFaceless(S.rows.find(r => r.id === mk.dataset.make));
@@ -425,13 +426,13 @@ function openPostEdit(i) {
 const otherLang = r => isAr(r) ? "Francais" : "عربي";
 const trDone = store.get("tr", {});
 const trButton = r => !r || isEcran(r) || (!r.fx && r.script.length < 20) ? "" : trDone[r.id] ? `<span class="pill ok" style="align-self:center">✓ version ${isAr(r) ? "FR" : "AR"} créée</span>` : `<button class="ghost" data-tr="${r.id}">🌐 Créer en ${isAr(r) ? "français" : "arabe"}</button>`;
-function trPrompt(r, data) {
+function trPrompt(r, data, long = false) {
   const to = isAr(r) ? "français parlé, tutoiement, phrases courtes" : "arabe tunisien (darija) naturel et clair, compréhensible dans tout le monde arabe";
   return `Tu adaptes une vidéo courte du Dr Fehmi (médecin, santé mentale) dans une autre langue : ${to}.
 Adaptation naturelle, pas du mot à mot : même sens, même structure, même ton, même nombre d'éléments. Ce qui est dit doit sonner comme écrit directement dans cette langue.
 Ne change JAMAIS : les sources (champ "i" des cartes, noms d'auteurs, revues, années), les chiffres, les valeurs de "img", "img_url", "gfx", "count", "seconds", "ok".
 Dans chaque plan, "hot" = 1 à 3 mots EXACTS du nouveau "say" ; "word", "stamp" et le dernier mot de "steps" doivent être prononcés dans le "say" du plan.
-Concision (rétention) : 85 à 100 mots AU TOTAL pour l'ensemble des "say" (compte-les) ; raccourcis chaque phrase si besoin, sans perdre l'accroche, les étapes de la technique ni la source. 12 mots maximum par phrase.
+${long ? "Longueur : comparable à l'original, jamais plus longue ; 14 mots maximum par phrase." : "Concision (rétention) : 85 à 100 mots AU TOTAL pour l'ensemble des \"say\" (compte-les) ; raccourcis chaque phrase si besoin, sans perdre l'accroche, les étapes de la technique ni la source. 12 mots maximum par phrase."}
 Titre YouTube 60 caractères max, hashtags adaptés à la langue (5 à 8), description 2-3 phrases + une question.
 Contenu à adapter (JSON) :
 ${JSON.stringify(data)}
@@ -439,6 +440,7 @@ Réponds UNIQUEMENT avec le même JSON adapté (mêmes clés).`;
 }
 async function translateVideo(r, btn) {
   if (!r) return;
+  if (isLong(r)) return translateLong(r, btn);
   const to = otherLang(r), lab = to === "عربي" ? "arabe" : "français";
   if (!confirm(`Créer la version ${lab} de « ${r.name} » ?\nClaude l'adapte (≈ 1 min), puis elle arrive dans 🎬 Tourner : tu enregistres la voix (ou voix clonée) et elle sera programmée sur la chaîne ${to === "عربي" ? "arabe" : "française"}.`)) return;
   const old = btn.textContent; btn.disabled = true; btn.textContent = "Claude adapte…";
@@ -580,7 +582,7 @@ function calibrate() {
   const h = t.scrollHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
   P.speed = Math.max(8, h / secs(r)) * P.mult;
 }
-function cur() { return S.rows.find(r => r.id === P.ids[P.i]); }
+function cur() { return (P.rows || S.rows).find(r => r.id === P.ids[P.i]); }
 
 /* ---------- incrustation : la vidéo est enregistrée depuis un canvas 1080×1920 qui ajoute l'accroche ---------- */
 const HOOK_MS = 3000;
@@ -697,6 +699,7 @@ $("#sClose").onclick = () => { if (P.rec) P.rec.stop(); closeShoot(); };
 $("#rRedo").onclick = () => { P.blob = null; showTake(); };
 $("#rKeep").onclick = () => {
   const r = cur(); if (!r || !P.blob) return;
+  if (P.audio && P.onKeep) { const blob = P.blob, mime = P.mime, fn = P.onKeep; P.blob = null; P.i = P.ids.length; closeShoot(); fn(blob, mime); return; }
   if (P.audio) { const blob = P.blob, mime = P.mime; P.blob = null; P.i = P.ids.length; closeShoot(); renderR7(r, { blob, mime }); return; }
   if (P.blob.size > MAX_BYTES) { toast("Vidéo trop lourde (> 150 Mo). Refais une prise plus courte."); return; }
   enqueue(r, P.blob, P.mime, publishDate(r, P.plan));
@@ -707,7 +710,7 @@ function closeShoot() {
   if (P.rec) return;
   P.stream?.getTracks().forEach(t => t.stop()); P.stream = null;
   try { P.lock?.release(); } catch {}
-  $("#stage").classList.remove("on", "audio"); P.audio = false; render();
+  $("#stage").classList.remove("on", "audio"); P.audio = false; P.rows = null; P.onKeep = null; render();
 }
 
 /* ---------- file d'envoi : Dropbox puis programmation Notion ---------- */
@@ -865,7 +868,9 @@ $("#bNew").onclick = () => {
     <h2 style="margin:0 0 4px">Nouveaux scripts avec Claude</h2>
     <div class="small">Ils arrivent dans ta liste « à tourner », avec description et hashtags.</div>
     <label>Format</label>
-    <div class="seg" id="gMode" style="width:100%"><button data-m="cam" style="flex:1">🎥 Face caméra</button><button data-m="fx" style="flex:1">🎞 Sans visage</button></div>
+    <div class="seg" id="gMode" style="width:100%"><button data-m="cam" style="flex:1">🎥 Face caméra</button><button data-m="fx" style="flex:1">🎞 Sans visage</button><button data-m="long" style="flex:1">📺 Vidéo longue</button></div>
+    <div id="gLongBox" hidden><div class="small" style="margin-top:8px">YouTube 16:9, pensée pour le référencement : Claude (Opus) propose un plan en chapitres que tu valides, puis écrit le script. Tu enregistres ta voix chapitre par chapitre ; montage animé, chapitres horodatés et publication YouTube automatiques.</div>
+      <label>Durée visée</label><select id="gMin"><option value="6">6 min</option><option value="8" selected>8 min</option><option value="10">10 min</option><option value="12">12 min</option></select></div>
     <div id="gStyleBox" hidden><div class="small" style="margin-top:8px">Style ambre : ta voix (enregistrée avec 🎙, ou ta voix clonée) · personnage du pack · animations · sous-titres incrustés · étiquette IA cochée.</div></div>
     <button class="ghost" id="gIdeas" style="width:100%;margin-top:12px">💡 Idées prêtes (Vague, Sursaut, santé mentale FR / AR)</button>
     <div id="gIdeaBox" hidden></div>
@@ -882,7 +887,7 @@ $("#bNew").onclick = () => {
   $("#gApp").value = o.app || "Vague";
   $("#gIdeas").onclick = () => toggleIdeas();
   let mode = o.mode || "cam";
-  const setMode = m => { mode = m; document.querySelectorAll("#gMode button").forEach(b => b.classList.toggle("on", b.dataset.m === m)); $("#gStyleBox").hidden = m !== "fx"; $("#gSec").disabled = m === "fx"; };
+  const setMode = m => { mode = m; document.querySelectorAll("#gMode button").forEach(b => b.classList.toggle("on", b.dataset.m === m)); $("#gStyleBox").hidden = m !== "fx"; $("#gLongBox").hidden = m !== "long"; $("#gSec").disabled = m !== "cam"; $("#gN").parentElement.hidden = $("#gSec").parentElement.hidden = m === "long"; };
   $("#gMode").onclick = e => { const m = e.target.closest("[data-m]")?.dataset.m; if (m) setMode(m); };
   setMode(mode);
   $("#gCancel").onclick = () => $("#sheet").innerHTML = "";
@@ -892,6 +897,7 @@ $("#bNew").onclick = () => {
     if (mode === "fx") opt.n = Math.min(opt.n, 3);
     if (!opt.topic) { toast("Écris un sujet."); return; }
     store.set("gen", opt);
+    if (mode === "long") { longOutline({ ...opt, lang: opt.lang === "عربي" ? "ar" : "fr", min: +$("#gMin").value }); return; }
     const btn = $("#gGo"); btn.disabled = true; btn.textContent = "Claude écrit…";
     if (mode === "fx") {
       try {
@@ -1283,7 +1289,7 @@ CHAQUE PLAN :
   "ring" (anneau, idéal plan 1) · "pulse" (tension, battements de cœur) · "breath" (cercle de respiration ; "steps": 2-3 étiquettes en MAJUSCULES dont le dernier mot est prononcé) · "cta" ("cta": le mot à écrire) · "ecg" (cœur qui ralentit) · "card" ("card": {"b": "ce que l'étude montre en 8 mots max", "i": "la source exacte"}) · "count" ("count": nombre d'étapes) · "check" ("items": [{"t": "3-5 mots", "ok": true|false}] 2 ou 3) · "split" ("left": {"label": "MYTHE" ou "AVANT", "t": "4-7 mots"}, "right": {"label": "VÉRITÉ" ou "APRÈS", "t": "4-7 mots"}) · "quote" ("quote": phrase à retenir, 12 mots max) · "bigword" ("word": UN mot-choc prononcé dans le plan) · "stamp" ("stamp": "FAUX", "VRAI" ou "MYTHE", mot prononcé dans le plan) · "timer" ("seconds": 3 à 10, quand on demande de faire l'exercice maintenant) · "none".
 - "hot" : 1 à 3 mots exacts du "say" à colorer.
 MUSIQUE : choisis "music" parmi ${Object.entries(MUSICS).map(([k, v]) => `${k} = ${v}`).join(" ; ")}.${o.lang === "ar" ? " En arabe, préfère oriental ou calme." : ""}
-Réponds UNIQUEMENT en JSON : {"technique": "id", "title": "titre YouTube 60 caractères max", "hook": "texte écran 3 à 6 mots", "description": "2-3 phrases + question, sans hashtags", "hashtags": "5 hashtags", "ghost": "UN mot-thème en majuscules", "music": "calme", "plans": [{"say": "", "title": "", "img": "", "gfx": "", "hot": []}]}`;
+${o.lang === "ar" ? "Vidéo en arabe : TOUS les textes affichés sont en arabe, étiquettes comprises (قبل / بعد، خرافة / الحقيقة، tampons خطأ / صحيح / خرافة، شهيق / زفير). Jamais de mot français à l'écran.\n" : ""}Réponds UNIQUEMENT en JSON : {"technique": "id", "title": "titre YouTube 60 caractères max", "hook": "texte écran 3 à 6 mots", "description": "2-3 phrases + question, sans hashtags", "hashtags": "5 hashtags", "ghost": "UN mot-thème en majuscules", "music": "calme", "plans": [{"say": "", "title": "", "img": "", "gfx": "", "hot": []}]}`;
 }
 function cleanPlans(arr) {
   return (arr || []).filter(p => p && String(p.say || "").trim()).slice(0, 12).map(p => {
@@ -1322,6 +1328,253 @@ async function createR7(o, tries = 2) {
   }) });
   return res.id;
 }
+/* ---------- vidéos longues YouTube (16:9) : plan validé par Fehmi, puis chapitres écrits par Claude ---------- */
+const LONG_WPM = 110;  // mots par minute une fois montée (voix posée, accélérée de 10 %)
+const longLang = o => o.lang === "ar" ? "arabe tunisien (darija) clair, compréhensible dans tout le monde arabe, mots simples" : "français parlé, tutoiement, phrases courtes";
+function longOutlinePrompt(o) {
+  const words = Math.round(o.min * LONG_WPM);
+  return `Tu es le scénariste YouTube du Dr Fehmi, médecin psychiatre (santé mentale, psychologie du quotidien, addictions). Vidéo LONGUE (${o.min} minutes, 16:9) pensée pour le RÉFÉRENCEMENT YouTube et Google (recherche, pas viralité) : sa voix + motion design ambre avec un personnage unique.
+Sujet : ${o.topic}
+Langue : ${longLang(o)}.
+${o.promo ? appRules(o.app || "Vague") : "Pas de promotion."}
+${seoRules(o)}
+RÈGLES SPÉCIFIQUES VIDÉO LONGUE :
+- Intention de recherche : la personne a tapé une question. L'intro (chapitre 0, 70 à 100 mots) y répond en une phrase dans les 20 premières secondes, prononce le mot-clé principal, puis annonce ce que la vidéo apporte (promesse concrète) et donne une raison de rester jusqu'au bout.
+- 5 à 7 chapitres au total, intro et conclusion comprises. Chaque chapitre intermédiaire répond à UNE question précise de longue traîne que les gens tapent (« pourquoi… », « comment… », « que faire quand… », « différence entre… ») : son titre contient cette expression, 50 caractères max.
+- Au moins un chapitre explique une technique prouvée, étape par étape, avec sa source exacte (liste ci-dessous) ; jamais de chiffre ni d'étude inventés.
+- Conclusion (60 à 90 mots) : récapitulatif en 3 points, quand consulter un professionnel, invitation à s'abonner et à regarder une autre vidéo du même thème.
+- Total : environ ${words} mots (répartis dans "words").
+TECHNIQUES PROUVÉES :
+${TECHNIQUES.map(t => `- [${t.id}] ${t.nom} — pour : ${t.pour}. Étapes : ${t.etapes}. Ce que l'étude montre : ${t.preuve}. Source : ${t.source}`).join("\n")}
+Réponds UNIQUEMENT en JSON : {"title": "titre YouTube, mot-clé en premier, 70 caractères max", "description": "4 à 6 phrases : la 1re contient le mot-clé principal ; résumé de ce qu'on apprend ; sans hashtags", "hashtags": "3 à 5 hashtags", "tags": "12 à 15 tags YouTube séparés par des virgules : mot-clé, variantes, longues traînes, questions", "technique": "id", "chapters": [{"t": "titre du chapitre", "q": "question exacte tapée par les gens", "points": ["idée 1", "idée 2", "idée 3"], "words": 150}]}`;
+}
+const LONG_GFX = `"gfx" (au plus 1 plan sur 2, varie, jamais deux fois le même d'affilée) : "card" ("card": {"b": "ce que l'étude montre en 10 mots max", "i": "la source exacte"}) · "check" ("items": [{"t": "3-6 mots", "ok": true|false}] 2 ou 3) · "split" ("left": {"label": "MYTHE" ou "AVANT", "t": "4-8 mots"}, "right": {"label": "VÉRITÉ" ou "APRÈS", "t": "4-8 mots"}) · "quote" ("quote": phrase à retenir, 14 mots max) · "count" ("count": nombre d'étapes) · "breath" ("steps": 2-3 étiquettes en MAJUSCULES dont le dernier mot est prononcé) · "bigword" ("word": UN mot prononcé dans le plan) · "stamp" ("stamp": "FAUX", "VRAI" ou "MYTHE", prononcé dans le plan) · "timer" ("seconds": 3 à 10) · "ecg" · "pulse" · "ring" (intro seulement) · "cta" ("cta": mot à écrire en commentaire, conclusion seulement) · "none".`;
+function longChapterPrompt(o, out, k) {
+  const ch = out.chapters[k], tech = TECHNIQUES.find(t => t.id === out.technique);
+  return `Tu écris le chapitre ${k + 1}/${out.chapters.length} d'une vidéo YouTube longue du Dr Fehmi, médecin psychiatre : sa voix + motion design ambre (16:9) avec un personnage unique.
+Titre de la vidéo : ${out.title}
+Plan complet : ${out.chapters.map((c, i) => `${i + 1}. ${c.t}`).join(" · ")}
+CE CHAPITRE : « ${ch.t} » — répond à : ${ch.q}. Points : ${(ch.points || []).join(" ; ")}. Environ ${ch.words || 150} mots.
+Langue : ${longLang(o)}.
+${k === 0 ? "C'est l'intro : 1re phrase = réponse directe à la question tapée, mot-clé principal prononcé dans les 10 premières secondes, promesse concrète, raison de rester jusqu'au bout. Pas de « Bonjour », pas de présentation longue." : k === out.chapters.length - 1 ? "C'est la conclusion : récapitule en 3 points, dis quand consulter un professionnel, invite à s'abonner et à regarder une autre vidéo du même thème." : "Le 1er plan pose la question du chapitre avec l'expression exacte (référencement), puis y répond concrètement : exemples du quotidien, étapes, erreurs fréquentes."}
+${tech ? `Technique de la vidéo : ${tech.nom}. Étapes : ${tech.etapes}. Ce que l'étude montre : ${tech.preuve}. Source à citer telle quelle : ${tech.source}.` : ""}
+Interdit : inventer un chiffre, une étude ou un pourcentage ; poser un diagnostic ; conseil médical dangereux.
+${o.promo ? appRules(o.app || "Vague") : ""}
+Découpe en plans de 15 à 40 mots (1 à 3 phrases, 14 mots max par phrase), un changement d'image à chaque plan ; relances naturelles entre les idées (« Et c'est là que… », « Concrètement… »).
+- "title" : texte affiché à l'écran, 2 à 7 mots, l'idée du plan (pas une copie de la phrase).
+- "img" : une clé de cette liste : ${Object.entries(PACK).map(([key, v]) => `${key} (${v})`).join(", ")}.
+- ${LONG_GFX}${o.lang === "ar" ? `
+- Vidéo en arabe : TOUS les textes affichés sont en arabe, étiquettes comprises (« قبل » / « بعد », « خرافة » / « الحقيقة » ; tampons « خطأ », « صحيح », « خرافة » ; étapes de respiration « شهيق » / « زفير »). Jamais de mot français à l'écran.` : ""}
+- "hot" : 1 à 3 mots EXACTS du "say" à colorer.
+Réponds UNIQUEMENT en JSON : {"plans": [{"say": "", "title": "", "img": "", "gfx": "", "hot": []}]}`;
+}
+const isLong = r => r?.fx?.style === "long";
+const chText = (r, k) => r.fx.plans.filter(p => (p.ch || 0) === k).map(p => p.say).join("\n\n");
+const longMin = r => Math.max(1, Math.round(r.fx.plans.reduce((a, p) => a + words(p.say), 0) / LONG_WPM));
+async function gzipB64(str) {  // le plan d'une vidéo longue est compressé pour tenir dans la commande de montage
+  try {
+    const buf = new Uint8Array(await new Response(new Blob([str]).stream().pipeThrough(new CompressionStream("gzip"))).arrayBuffer());
+    let bin = ""; for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
+    return btoa(bin);
+  } catch { return b64(str); }
+}
+// stockage Post for Me : public et durable (voix des chapitres, vidéo longue), sans limite de taille Dropbox
+async function pfmUpload(blob) {
+  const u = await api("pfmup"); if (u.status >= 300 || !u.upload_url) throw new Error("stockage indisponible");
+  const res = await fetch(u.upload_url, { method: "PUT", headers: { "Content-Type": (blob.type || "audio/mp4").split(";")[0] }, body: blob });
+  if (!res.ok) throw new Error("envoi : " + res.status);
+  return u.media_url;
+}
+
+// 1. plan proposé par Claude, validé par Fehmi
+async function longOutline(opt) {
+  const btn = $("#gGo"); btn.disabled = true; btn.textContent = "Claude prépare le plan…"; $("#gOut").innerHTML = "";
+  try {
+    let out = null;
+    for (let i = 0; i < 2 && !out; i++) {
+      const j = parseJSON((await api("gen", { prompt: longOutlinePrompt(opt) })).text);
+      if (j?.title && Array.isArray(j.chapters) && j.chapters.length >= 3) out = j;
+    }
+    if (!out) throw new Error("Claude n'a pas rendu de plan complet, réessaie dans une minute.");
+    out.chapters = out.chapters.slice(0, 8);
+    btn.textContent = "Plan prêt ↓";
+    $("#gOut").innerHTML = `<div class="small" style="margin-top:14px">Plan proposé (≈ ${opt.min} min). Valide, ou demande un autre plan :</div>
+      <div dir="auto" style="margin-top:8px;padding:12px 14px;border:1px solid var(--line);border-radius:14px">
+        <b>${esc(out.title)}</b>
+        ${out.chapters.map((c, k) => `<div style="margin-top:10px">${k ? k + ". " : "▶ "}${esc(c.t)}<div class="small">🔎 ${esc(c.q || "")}</div></div>`).join("")}
+        <div class="small" style="margin-top:10px">🏷 ${esc(out.tags || "")}</div></div>
+      <div class="row" style="margin-top:12px"><button class="ghost" id="oAgain">↺ Autre plan</button><button class="pri" id="oGo">✓ Écrire le script</button></div>`;
+    $("#gOut").scrollIntoView({ behavior: "smooth", block: "start" });
+    $("#oAgain").onclick = () => longOutline(opt);
+    $("#oGo").onclick = () => longWrite(opt, out);
+  } catch (e) { btn.disabled = false; btn.textContent = "Écrire"; $("#gOut").innerHTML = `<div class="err">${esc(e.message)}</div>`; }
+}
+// 2. chapitres écrits en parallèle, puis la vidéo arrive dans « Tourner »
+async function longWrite(opt, out) {
+  const b = $("#oGo"); b.disabled = true; $("#oAgain").disabled = true;
+  let done = 0; const n = out.chapters.length; b.textContent = `Claude écrit… 0/${n}`;
+  try {
+    const res = await pool(out.chapters.map((c, k) => k), 3, async k => {
+      for (let i = 0; i < 2; i++) {
+        const ps = cleanPlans(parseJSON((await api("gen", { prompt: longChapterPrompt(opt, out, k) })).text)?.plans);
+        if (ps.length >= 2) { b.textContent = `Claude écrit… ${++done}/${n}`; return ps; }
+      }
+      throw new Error(`le chapitre ${k + 1} n'a pas pu être écrit, réessaie dans une minute`);
+    });
+    const plans = res.flatMap((ps, k) => ps.map(p => ({ ...p, ch: k })));
+    const lang = opt.lang === "ar" ? "عربي" : "Francais";
+    const fx = { style: "long", lang: opt.lang, kw: opt.kw || [], technique: String(out.technique || ""), music: "calme", speed: 1.1,
+      chapters: out.chapters.map(c => String(c.t || "").slice(0, 90)), tags: String(out.tags || "").slice(0, 500), desc0: String(out.description || "").slice(0, 1800), plans, voices: [] };
+    await api("create", { props: JSON.stringify({
+      Name: { title: [{ text: { content: String(out.title || opt.topic).slice(0, 100) } }] },
+      Script: rt(fx.chapters.map((c, k) => `## ${k ? k + ". " : ""}${c}\n\n` + plans.filter(p => p.ch === k).map(p => p.say).join("\n\n")).join("\n\n")),
+      Description: rt(fx.desc0), Hashtags: rt(out.hashtags), "Texte écran": rt(fx.chapters[0]), "Scènes": rt(JSON.stringify(fx)),
+      Production: { select: { name: "Visuels IA" } }, Type: { select: { name: "Video Long" } }, Language: { select: { name: lang } },
+      Channel: { select: { name: lang === "عربي" ? "Dr Fehmi AR" : "Fehmi Tlaies FR" } }, "Pipeline Stage": { select: { name: "Script" } }, "Promo app": { checkbox: !!opt.promo }
+    }) });
+    $("#sheet").innerHTML = ""; toast("Vidéo longue prête à enregistrer : touche 📺 sur sa carte.", 5000); load();
+  } catch (e) { b.disabled = false; $("#oAgain").disabled = false; b.textContent = "✓ Écrire le script"; toast(e.message, 6000); }
+}
+
+function longCard(r) {
+  const n = r.fx.chapters?.length || 0, v = (r.fx.voices || []).filter(Boolean).length, job = rx.get(r.id), wait = job && !job.done && !r.link;
+  return `<div class="card"><span style="width:24px;flex:none;text-align:center" aria-hidden="true">📺</span>
+    <div class="b"><div class="t" dir="auto" data-edit="${r.id}">${esc(r.name)} <span class="small">✎</span></div>
+      <div class="meta"><span class="pill">${isAr(r) ? "AR" : "FR"}</span><span class="pill">YouTube 16:9</span><span class="pill">${n} chapitres · ~${longMin(r)} min</span>
+      ${wait ? `<span class="pill warn">⏳ montage en cours</span>` : r.link ? `<span class="pill ok">vidéo prête</span>` : `<span class="pill ${v === n ? "ok" : "warn"}">🎙 ${v}/${n} chapitres enregistrés</span>`}</div></div>
+    <button class="go" data-long="${r.id}" aria-label="Ouvrir la vidéo longue">${wait ? "⏳" : "📺"}</button></div>
+    ${r.link ? `<div class="vbox" data-v="${esc(r.link)}" style="margin:-4px 0 12px"><div class="row"><button class="ghost vplay">▶ Regarder</button><button class="pri" data-pub="${r.id}">🚀 Publier</button></div></div><div class="row" style="margin:-4px 0 12px">${trButton(r)}</div>` : ""}`;
+}
+// 3. voix chapitre par chapitre (prompteur en mode voix), puis montage
+function openLong(r) {
+  if (!r) return;
+  const fx = r.fx, n = fx.chapters.length; fx.voices = fx.voices || [];
+  const all = fx.chapters.every((c, k) => fx.voices[k]);
+  $("#sheet").innerHTML = `<div class="sheet"><div>
+    <h2 style="margin:0 0 4px" dir="auto">${esc(r.name)}</h2>
+    <div class="small">Enregistre ta voix chapitre par chapitre : pièce calme, téléphone à 20 cm, mode avion. Un chapitre raté se refait seul ; tu peux t'arrêter et reprendre plus tard, même sur un autre appareil.</div>
+    ${fx.kw?.length ? `<div class="small" style="margin-top:6px">🔎 Mot-clé principal : ${esc(fx.kw[0])}</div>` : ""}
+    <div style="margin:12px 0">${fx.chapters.map((c, k) => `<div class="sayplan" style="display:flex;gap:10px;align-items:center">
+      <div style="flex:1;min-width:0" dir="auto"><small>${k ? (isAr(r) ? "الفصل " : "Chapitre ") + k : "Intro"} · ~${Math.max(10, Math.round(words(chText(r, k)) / LONG_WPM * 60))} s</small>${esc(c)}</div>
+      <button class="${fx.voices[k] ? "ghost" : "pri"}" data-lrec="${k}" style="flex:none;width:auto;padding:10px 14px">${fx.voices[k] ? "✓ Refaire" : "🎙 Enregistrer"}</button></div>`).join("")}</div>
+    <div class="row"><div><label>Musique</label><select id="lMusic">${Object.entries(MUSICS).map(([k, v]) => `<option value="${k}" ${(fx.music || "calme") === k ? "selected" : ""}>${esc(v)}</option>`).join("")}<option value="none" ${fx.music === "none" ? "selected" : ""}>sans musique</option></select></div>
+      <div><label>Rythme de la voix</label><select id="lSpeed">${[[1, "naturel"], [1.1, "+10 % (recommandé)"], [1.2, "+20 %"]].map(([v, l]) => `<option value="${v}" ${(fx.speed || 1.1) === v ? "selected" : ""}>${l}</option>`).join("")}</select></div></div>
+    <button class="pri" id="lGo" style="width:100%;margin-top:14px" ${all ? "" : "disabled"}>${all ? `🎬 Lancer le montage (≈ ${Math.round(longMin(r) * 2.5 + 6)} min)` : `🎙 ${fx.voices.filter(Boolean).length}/${n} chapitres enregistrés`}</button>
+    <button class="ghost" id="lClose" style="width:100%;margin-top:10px">Fermer</button>
+  </div></div>`;
+  const keep = () => { fx.music = $("#lMusic").value; fx.speed = +$("#lSpeed").value; };
+  $("#lClose").onclick = () => $("#sheet").innerHTML = "";
+  document.querySelectorAll("[data-lrec]").forEach(b => b.onclick = async () => {
+    keep(); const k = +b.dataset.lrec; $("#sheet").innerHTML = "";
+    P.rows = [{ id: `${r.id}-c${k}`, name: `${k ? "Chapitre " + k : "Intro"} — ${fx.chapters[k]}`, script: chText(r, k), lang: r.lang, hook: "" }];
+    P.onKeep = (blob, mime) => saveChapterVoice(r, k, blob, mime);
+    await startShoot([P.rows[0].id], store.get("plan", { mode: "now", time: "18:00" }), true);
+    $("#rKeep").textContent = "✓ Garder ce chapitre";
+  });
+  $("#lGo").onclick = () => { keep(); $("#sheet").innerHTML = ""; renderLong(r); };
+}
+async function saveChapterVoice(r, k, blob, mime) {
+  toast("Envoi de la voix du chapitre…", 15000);
+  try {
+    const url = await pfmUpload(blob).catch(() => falUpload(blob, `voix-ch${k}.` + (/mp4|m4a|aac/.test(mime || blob.type) ? "m4a" : "webm")));
+    r.fx.voices = r.fx.voices || []; r.fx.voices[k] = url;
+    await api("update", { id: r.id, props: JSON.stringify({ "Scènes": rt(JSON.stringify(r.fx)) }) });
+    toast("Chapitre enregistré ✓");
+  } catch (e) { toast("Échec de l'envoi : " + e.message + ". Refais ce chapitre.", 6000); }
+  render(); openLong(r);
+}
+async function renderLong(r) {
+  const fx = r.fx;
+  $("#fx").classList.add("on"); $("#fxv").style.display = "none"; $("#fxc").style.display = "none";
+  $("#fxTitle").textContent = r.name; fxButtons(`<button class="ghost" id="fxClose">Fermer</button>`, { fxClose: closeFx });
+  const steps = [[`Ta voix (${fx.chapters.length} chapitres)`, "ok"], ["Préparation de l'envoi", "run"], [`Montage (≈ ${Math.round(longMin(r) * 2.5 + 6)} min, tu peux fermer le Studio)`, "wait"]];
+  fxSteps(steps);
+  try {
+    const up = await api("pfmup"); if (up.status >= 300 || !up.upload_url) throw new Error("stockage Post for Me indisponible, réessaie");
+    steps[1][1] = "ok"; steps[2][1] = "run"; fxSteps(steps);
+    const t = String(Math.floor(Date.now() / 1000));
+    const job = { format: "long", lang: isAr(r) ? "ar" : "fr", music: fx.music || "calme", sfx: true, speed: fx.speed || 1.1, voices: fx.voices, chapters: fx.chapters, upload: up.upload_url, plans: fx.plans.map(({ newimg, ...p }) => p) };
+    const enc = await gzipB64(JSON.stringify(job));
+    if (enc.length > 59000) throw new Error("script trop long pour un seul montage : raccourcis un chapitre");
+    const res = await api("render", { id: r.id, t, ref: REF, job: enc });
+    if (!res.ok) throw new Error("GitHub a refusé le montage (" + (res.status || "?") + ")");
+    api("update", { id: r.id, props: JSON.stringify({ "Scènes": rt(JSON.stringify(fx)) }) }).catch(() => {});
+    rx.set(r.id, { file: "", name: `${r.id}-${t}`, media: up.media_url, long: true, cost: 0, at: Date.now() });
+    render(); watchRender(r, true);
+  } catch (e) {
+    const i = steps.findIndex(x => x[1] === "run"); if (i >= 0) steps[i][1] = "err"; fxSteps(steps);
+    fxButtons(`<button class="ghost" id="fxClose2">Fermer</button><button class="pri" id="fxRetry">Réessayer</button>`, { fxClose2: closeFx, fxRetry: () => renderLong(r) });
+    toast(e.message, 6000);
+  }
+}
+// chapitres horodatés (lus dans l'annotation du montage GitHub) + source + avertissement dans la description YouTube
+async function longFinish(r, run) {
+  let ch = [];
+  try {
+    const jobs = await (await fetch(`https://api.github.com/repos/${REPO}/actions/runs/${run.id}/jobs`)).json();
+    const cr = jobs.jobs?.[0]?.check_run_url;
+    const an = cr ? await (await fetch(cr + "/annotations")).json() : [];
+    const a = (Array.isArray(an) ? an : []).find(x => x.title === "chapitres"); if (a) ch = JSON.parse(a.message);
+  } catch {}
+  const fx = r.fx, ar = isAr(r), tech = TECHNIQUES.find(t => t.id === fx.technique);
+  const desc = [fx.desc0 || r.desc,
+    ch.length >= 3 ? (ar ? "الفصول :\n" : "Chapitres :\n") + ch.map(c => `${c.t} ${c.title}`).join("\n") : "",
+    tech ? `${ar ? "المصدر" : "Source"} : ${tech.source} — PubMed ${tech.pmid}` : "",
+    ar ? "هذا الفيديو للتوعية فقط ولا يعوّض استشارة طبيب أو أخصائي نفسي." : "Cette vidéo informe : elle ne remplace pas une consultation médicale ou psychologique."].filter(Boolean).join("\n\n");
+  fx.chaptersAt = ch; r.desc = desc;
+  return { Description: rt(desc), "Scènes": rt(JSON.stringify(fx)) };
+}
+// 4. publication YouTube (chaîne de la langue) à la date choisie
+function publishLong(r) {
+  const d0 = new Date(); d0.setDate(d0.getDate() + 1); d0.setHours(18, 0, 0, 0);
+  $("#sheet").innerHTML = `<div class="sheet"><div>
+    <h2 style="margin:0 0 4px" dir="auto">${esc(r.name)}</h2>
+    <div class="small">Publiée sur YouTube seulement (chaîne ${isAr(r) ? "Dr Fehmi AR" : "Fehmi Tlaies FR"}), avec les chapitres dans la description. Titre, description et date restent modifiables dans 📊 Suivi.</div>
+    <label>Date et heure de publication</label><input type="datetime-local" id="lDate" value="${localInput(d0)}">
+    <div class="row" style="margin-top:14px"><button class="ghost" id="lpClose">Fermer</button><button class="pri" id="lpGo">🚀 Programmer</button></div>
+  </div></div>`;
+  $("#lpClose").onclick = () => $("#sheet").innerHTML = "";
+  $("#lpGo").onclick = async () => {
+    const d = new Date($("#lDate").value); if (isNaN(d)) return toast("Date invalide");
+    const b = $("#lpGo"); b.disabled = true; b.textContent = "Programmation…";
+    try {
+      await api("update", { id: r.id, props: JSON.stringify({ Production: { select: { name: "Visuels IA" } }, Type: { select: { name: "Video Long" } }, "Pipeline Stage": { select: { name: "Scheduled" } }, "Statut publication": { select: { name: "En attente" } }, "Publish Date": { date: { start: d.toISOString() } } }) });
+      rx.del(r.id); S.rows = S.rows.filter(x => x.id !== r.id); $("#sheet").innerHTML = ""; render();
+      toast(`Programmée pour ${fmtDate(d)} sur YouTube.`, 5000);
+    } catch (e) { b.disabled = false; b.textContent = "🚀 Programmer"; toast(e.message); }
+  };
+}
+// version dans l'autre langue : chaque chapitre adapté par Claude, mêmes images et animations, voix à réenregistrer
+async function translateLong(r, btn) {
+  const to = otherLang(r), lab = to === "عربي" ? "arabe" : "français", fx = r.fx;
+  if (!confirm(`Créer la version ${lab} de cette vidéo longue ?\nClaude adapte chaque chapitre (≈ 2 min), puis tu enregistres ta voix chapitre par chapitre ; elle sera publiée sur la chaîne YouTube ${lab === "arabe" ? "arabe" : "française"}.`)) return;
+  const old = btn.textContent; btn.disabled = true; btn.textContent = "Claude adapte…";
+  try {
+    const meta = parseJSON((await api("gen", { prompt: trPrompt(r, { title: r.name, description: fx.desc0 || r.desc, hashtags: r.tags, tags: fx.tags || "", chapters: fx.chapters }, true) })).text);
+    if (!meta?.title || !Array.isArray(meta.chapters)) throw new Error("adaptation incomplète, réessaie");
+    const res = await pool(fx.chapters.map((c, k) => k), 3, async k => {
+      const src = fx.plans.filter(p => (p.ch || 0) === k);
+      for (let i = 0; i < 2; i++) {
+        const ps = cleanPlans(parseJSON((await api("gen", { prompt: trPrompt(r, { plans: src }, true) })).text)?.plans);
+        if (ps.length) return ps.map((p, j) => { const o = src[j] || {}; return { ...p, img: o.img || p.img, gfx: o.gfx || p.gfx, ch: k, ...(o.card ? { card: { b: p.card?.b || o.card.b, i: o.card.i } } : {}) }; });
+      }
+      throw new Error(`chapitre ${k + 1} : adaptation incomplète, réessaie`);
+    });
+    const plans = res.flat();
+    const nfx = { ...fx, lang: to === "عربي" ? "ar" : "fr", chapters: fx.chapters.map((c, k) => String(meta.chapters[k] || c).slice(0, 90)), tags: String(meta.tags || "").slice(0, 500), desc0: String(meta.description || "").slice(0, 1800), plans, voices: [], chaptersAt: [] };
+    await api("create", { props: JSON.stringify({
+      Name: { title: [{ text: { content: String(meta.title).slice(0, 100) } }] },
+      Script: rt(nfx.chapters.map((c, k) => `## ${c}\n\n` + plans.filter(p => p.ch === k).map(p => p.say).join("\n\n")).join("\n\n")),
+      Description: rt(nfx.desc0), Hashtags: rt(meta.hashtags), "Texte écran": rt(nfx.chapters[0]), "Scènes": rt(JSON.stringify(nfx)),
+      Production: { select: { name: "Visuels IA" } }, Type: { select: { name: "Video Long" } }, Language: { select: { name: to } },
+      Channel: { select: { name: to === "عربي" ? "Dr Fehmi AR" : "Fehmi Tlaies FR" } }, "Pipeline Stage": { select: { name: "Script" } }, "Promo app": { checkbox: !!r.promo }
+    }) });
+    trDone[r.id] = 1; store.set("tr", trDone);
+    btn.outerHTML = `<span class="pill ok" style="align-self:center">✓ version ${lab === "arabe" ? "AR" : "FR"} créée</span>`;
+    toast(`Version ${lab} créée : elle est dans 🎬 Tourner.`, 5000); if (S.tab === "shoot") load();
+  } catch (e) { btn.disabled = false; btn.textContent = old; toast(e.message, 6000); }
+}
+
 function r7Card(r) {
   const job = rx.get(r.id), wait = job && !r.link;
   return `<div class="card"><span style="width:24px;flex:none;text-align:center" aria-hidden="true">🎙</span>
@@ -1466,7 +1719,7 @@ async function watchRender(r, show) {
   if (watching.has(r.id)) return; watching.add(r.id);
   const step = msg => { if ($("#fx").classList.contains("on") && $("#fxTitle").textContent === r.name) fxSteps([["Voix", "ok"], ["Images", "ok"], [msg, "run"]]); };
   try {
-    for (let k = 0; k < 90; k++) {
+    for (let k = 0; k < 300; k++) {
       const min = Math.max(0, Math.round((Date.now() - job.at) / 60000));
       let run;
       try {
@@ -1476,26 +1729,27 @@ async function watchRender(r, show) {
       step(run ? (run.status === "completed" ? "Vidéo terminée, récupération…" : `Montage en cours… ${min} min`) : `Montage en attente… ${min} min`);
       if (run?.status === "completed") {
         if (run.conclusion !== "success") throw new Error("le montage a échoué sur GitHub");
-        const l = await api("rlink", { file: job.file });
+        const l = job.long ? { status: 200, url: job.media } : await api("rlink", { file: job.file });
         if (l.status !== 200 || !l.url) throw new Error("vidéo introuvable dans Dropbox");
         r.link = l.url; r.cost = job.cost;
-        await api("update", { id: r.id, props: JSON.stringify({ Link: { url: l.url }, "Coût ($)": { number: job.cost } }) }).catch(() => {});
+        const extra = job.long ? await longFinish(r, run) : {};
+        await api("update", { id: r.id, props: JSON.stringify({ Link: { url: l.url }, "Coût ($)": { number: job.cost }, ...extra }) }).catch(() => {});
         job.done = true; rx.set(r.id, job); render();
         if ($("#fx").classList.contains("on") && $("#fxTitle").textContent === r.name) {
           fxSteps([["Voix", "ok"], ["Images", "ok"], [`Montage — coût ${money(job.cost)}`, "ok"]]);
           const v = $("#fxv"); v.src = streamUrl(l.url); v.style.display = "block";
           fxButtons(`<button class="ghost" id="fxRedo">↺ Refaire la voix</button><button class="pri" id="fxKeep">✓ Publier</button>`, {
-            fxRedo: () => { closeFx(); openVoice(r); }, fxKeep: async () => { closeFx(); await publishR7(r); } });
+            fxRedo: () => { closeFx(); job.long ? openLong(r) : openVoice(r); }, fxKeep: async () => { closeFx(); job.long ? publishLong(r) : await publishR7(r); } });
         } else toast("Vidéo prête : " + r.name, 5000);
         return;
       }
-      if (Date.now() - job.at > 40 * 60000) throw new Error("montage trop long : réessaie");
-      await new Promise(ok => setTimeout(ok, Date.now() - job.at < 150000 ? 150000 - (Date.now() - job.at) : 30000));
+      if (Date.now() - job.at > (job.long ? 130 : 40) * 60000) throw new Error("montage trop long : réessaie");
+      await new Promise(ok => setTimeout(ok, Date.now() - job.at < 150000 ? 150000 - (Date.now() - job.at) : job.long ? 90000 : 30000));  // API GitHub publique : 60 appels/h
     }
   } catch (e) {
     rx.del(r.id); render(); toast(e.message, 6000);
     if ($("#fx").classList.contains("on") && $("#fxTitle").textContent === r.name)
-      fxButtons(`<button class="ghost" id="fxClose2">Fermer</button><button class="pri" id="fxRetry">Refaire la voix</button>`, { fxClose2: closeFx, fxRetry: () => { closeFx(); openVoice(r); } });
+      fxButtons(`<button class="ghost" id="fxClose2">Fermer</button><button class="pri" id="fxRetry">${job.long ? "Relancer" : "Refaire la voix"}</button>`, { fxClose2: closeFx, fxRetry: () => { closeFx(); job.long ? openLong(r) : openVoice(r); } });
   } finally { watching.delete(r.id); }
 }
 // Publication : la vidéo est déjà dans Dropbox, on la programme directement (sous-titres déjà incrustés, étiquette IA cochée)
@@ -1510,7 +1764,7 @@ async function publishR7(r) {
   } catch (e) { toast(e.message); }
 }
 // Montages lancés avant une fermeture du Studio : on reprend le suivi en arrière-plan
-function resumeRenders() { for (const r of S.rows) if (isR7(r) && !r.link && rx.get(r.id)) watchRender(r, false); }
+function resumeRenders() { for (const r of S.rows) if ((isR7(r) || isLong(r)) && !r.link && rx.get(r.id)) watchRender(r, false); }
 
 
 render();
