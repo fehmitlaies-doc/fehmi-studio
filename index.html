@@ -174,7 +174,7 @@ h1{font-size:22px;margin:0}
 <script>
 const API = "https://hook.eu1.make.com/0jj57vomxlae4srwpwj6m74kdrkk24p2";
 // Mise à jour automatique : l'iPhone garde l'ancienne page en cache ; on compare avec la version en ligne et on recharge
-const BUILD = "2026-10-29.4";
+const BUILD = "2026-10-29.5";
 async function checkUpdate() {
   try {
     const t = await (await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" })).text();
@@ -431,7 +431,7 @@ function trPrompt(r, data, long = false) {
   const to = isAr(r) ? "français parlé, tutoiement, phrases courtes" : "arabe tunisien (darija) naturel et clair, compréhensible dans tout le monde arabe";
   return `Tu adaptes une vidéo courte du Dr Fehmi (médecin, santé mentale) dans une autre langue : ${to}.
 Adaptation naturelle, pas du mot à mot : même sens, même structure, même ton, même nombre d'éléments. Ce qui est dit doit sonner comme écrit directement dans cette langue.
-Ne change JAMAIS : les sources (champ "i" des cartes, noms d'auteurs, revues, années), les chiffres, les valeurs de "img", "img_url", "gfx", "count", "seconds", "ok".
+N'ajoute AUCUNE information, aucun chiffre ni aucune affirmation absents de l'original ; garde les nuances (« souvent », « chez beaucoup »). Ne change JAMAIS : les sources (champ "i" des cartes, noms d'auteurs, revues, années), les chiffres, les valeurs de "img", "img_url", "gfx", "count", "seconds", "ok".
 Dans chaque plan, "hot" = 1 à 3 mots EXACTS du nouveau "say" ; "word", "stamp" et le dernier mot de "steps" doivent être prononcés dans le "say" du plan.
 ${long ? "Longueur : comparable à l'original, jamais plus longue ; 14 mots maximum par phrase." : "Concision (rétention) : 85 à 100 mots AU TOTAL pour l'ensemble des \"say\" (compte-les) ; raccourcis chaque phrase si besoin, sans perdre l'accroche, les étapes de la technique ni la source. 12 mots maximum par phrase."}
 Titre YouTube 60 caractères max, hashtags adaptés à la langue (5 à 8), description 2-3 phrases + une question.
@@ -463,10 +463,17 @@ async function translateVideo(r, btn) {
     if (r.fx?.style === "r7") {
       // textes adaptés, mais images, animations et sources gardées à l'identique
       const plans = cleanPlans(j.plans.map((p, k) => { const o = r.fx.plans[k] || {}; return { ...p, img: o.img || p.img, gfx: o.gfx || p.gfx, ...(o.img_url ? { img_url: o.img_url } : {}), ...(o.card ? { card: { b: p.card?.b || o.card.b, i: o.card.i } } : {}) }; }));
+      btn.textContent = "🩺 Relecture…";
+      const check = await checkPlans(plans, `version ${lab} d'une vidéo courte animée : ${j.title || r.name}`);
       props.Script = rt(plans.map(p => p.say).join("\n\n"));
-      props["Scènes"] = rt(JSON.stringify({ ...r.fx, plans }));
+      props["Scènes"] = rt(JSON.stringify({ ...r.fx, check, plans }));
       props.Production = { select: { name: "Visuels IA" } };
-    } else props.Script = rt(j.script);
+    } else {
+      btn.textContent = "🩺 Relecture…";
+      const c = await factCheck([{ id: "script", t: String(j.script) }], `version ${lab} d'une vidéo face caméra`);
+      props.Script = rt(c.fixes[0]?.t || j.script);
+      if (!c.ok) toast("Relecture scientifique indisponible : relis bien ce script.", 6000);
+    }
     await api("create", { props: JSON.stringify(props) });
     trDone[r.id] = 1; store.set("tr", trDone);
     btn.outerHTML = `<span class="pill ok" style="align-self:center">✓ version ${lab === "arabe" ? "AR" : "FR"} créée</span>`;
@@ -789,6 +796,7 @@ function metaPrompt(r) {
 Langue : ${isAr(r) ? "arabe (darija tunisienne compréhensible, ou arabe simple)" : "français"}.
 ${r.promo ? "La vidéo promeut son app (Vague pour le tabac, Sursaut pour le temps d'écran, selon le sujet) : mentionne-la naturellement, « sur l'App Store », sans lien ni promesse." : ""}
 Référencement : la 1re phrase contient le mot-clé que les gens tapent sur ce sujet (de préférence une expression précise de longue traîne) ; hashtags = 1 ou 2 larges + le mot-clé + des hashtags précis, jamais seulement #fyp.
+N'ajoute aucune affirmation, aucun chiffre ni aucune promesse absents du script ; pas de diagnostic du lecteur.
 Titre : ${r.name}
 Script : ${r.script.slice(0, 3000)}
 Réponds UNIQUEMENT en JSON : {"description": "2 à 3 phrases accrocheuses + une question pour les commentaires, sans hashtags", "hashtags": "5 à 8 hashtags pertinents séparés par des espaces"}`;
@@ -802,7 +810,7 @@ ${RETENTION}
 ${o.promo ? appRules(o.app || "Vague") : "Pas de promotion."}
 ${seoRules(o)}
 Pas d'indications de mise en scène, pas d'emojis : seulement le texte à dire, avec des retours à la ligne pour respirer.
-Ne donne pas de conseil médical dangereux ; reste factuel et prudent.
+${EVIDENCE}
 Réponds UNIQUEMENT en JSON : [{"title": "titre YouTube accrocheur, 60 caractères max", "hook": "texte écran 3 à 6 mots", "script": "...", "description": "2-3 phrases + question, sans hashtags", "hashtags": "5 à 8 hashtags"}]`;
 }
 // Référencement YouTube / TikTok / Shorts : mot-clé de longue traîne prononcé, écrit et répété aux bons endroits
@@ -913,8 +921,13 @@ $("#bNew").onclick = () => {
       const out = await api("gen", { prompt: mode === "fx" ? facelessPrompt(opt) : scriptsPrompt(opt) });
       let arr = parseJSON(out.text); if (!Array.isArray(arr)) arr = arr ? [arr] : [];
       if (!arr.length) throw new Error("réponse illisible, réessaie");
+      arr = arr.slice(0, 5); btn.textContent = "🩺 Relecture scientifique…";
+      const chk = await factCheck(arr.flatMap((x, k) => [{ id: k + ".script", t: String(x.script || "") }, { id: k + ".title", t: String(x.title || "") }, { id: k + ".description", t: String(x.description || "") }]), `scripts face caméra sur : ${opt.topic}`);
+      chk.fixes.forEach(f => { const [k, field] = f.id.split("."); arr[+k][field] = f.t; });
+      if (!chk.ok) toast("Relecture scientifique indisponible : relis bien ces scripts.", 6000);
+      else if (chk.fixes.length) toast(`🩺 ${chk.fixes.length} correction${chk.fixes.length > 1 ? "s" : ""} scientifique${chk.fixes.length > 1 ? "s" : ""} appliquée${chk.fixes.length > 1 ? "s" : ""}.`, 5000);
       let done = 0;
-      for (const s of arr.slice(0, 5)) {
+      for (const s of arr) {
         btn.textContent = `Enregistrement ${++done}/${arr.length}…`;
         await api("create", { props: JSON.stringify({
           Name: { title: [{ text: { content: String(s.title || opt.topic).slice(0, 200) } }] },
@@ -1165,7 +1178,7 @@ ${SCENE_RULES}
 La 1re scène porte l'accroche et doit avoir l'image la plus intrigante. Rien de choquant.
 ${o.promo ? appRules(o.app || "Vague") : "Pas de promotion."}
 ${seoRules(o)}
-Ne donne pas de conseil médical dangereux ; reste factuel et prudent.
+${EVIDENCE}
 Réponds UNIQUEMENT en JSON : [{"title": "titre YouTube 60 caractères max", "hook": "texte écran 3 à 6 mots", "description": "2-3 phrases + question, sans hashtags", "hashtags": "5 à 8 hashtags", "character": "recurring character description in english", "scenes": [{"text": "voix off", "image": "english literal visual", "motion": "english camera/subject motion"}]}]`;
 }
 
@@ -1269,7 +1282,8 @@ ${o.promo ? appRules(o.app || "Vague") + "\n" : ""}${seoRules(o)}
 TECHNIQUES PROUVÉES (choisis LA plus adaptée au sujet, explique-la précisément, étapes concrètes ; cite uniquement sa source, telle quelle) :
 ${TECHNIQUES.map(t => `- [${t.id}] ${t.nom} — pour : ${t.pour}. Étapes : ${t.etapes}. Ce que l'étude montre : ${t.preuve}. Source : ${t.source}`).join("\n")}
 ${o.source ? `Source supplémentaire fournie : ${o.source}` : ""}
-Interdit : inventer un chiffre, une étude ou un pourcentage ; poser un diagnostic ; conseil médical dangereux. Si sujet de santé : une phrase invite à consulter un professionnel.
+${EVIDENCE}
+Si sujet de santé : une phrase invite à consulter un professionnel.
 
 RÉTENTION MAXIMALE (règles strictes) :
 - Plan 1 (moins de 2,5 s) : accroche qui crée un manque. Formules : douleur précise (« Tu te réveilles à 3 h du matin ? »), contre-intuitif (« Arrête de te dire de te calmer »), promesse chiffrée concrète (« 10 secondes pour… »). Jamais de bonjour ni de présentation.
@@ -1293,6 +1307,69 @@ CHAQUE PLAN :
 MUSIQUE : choisis "music" parmi ${Object.entries(MUSICS).map(([k, v]) => `${k} = ${v}`).join(" ; ")}.${o.lang === "ar" ? " En arabe, préfère oriental ou calme." : ""}
 ${o.lang === "ar" ? "Vidéo en arabe : TOUS les textes affichés sont en arabe, étiquettes comprises (قبل / بعد، خرافة / الحقيقة، tampons خطأ / صحيح / خرافة، شهيق / زفير). Jamais de mot français à l'écran.\n" : ""}Réponds UNIQUEMENT en JSON : {"technique": "id", "title": "titre YouTube 60 caractères max", "hook": "texte écran 3 à 6 mots", "description": "2-3 phrases + question, sans hashtags", "hashtags": "5 hashtags", "ghost": "UN mot-thème en majuscules", "music": "calme", "plans": [{"say": "", "title": "", "img": "", "gfx": "", "hot": []}]}`;
 }
+/* ---------- exactitude scientifique : règle d'écriture + relecture par un 2e passage de Claude (psychiatre relecteur) ---------- */
+const MYTHS = "« on n'utilise que 10 % du cerveau », cerveau gauche/droit, « 21 jours pour créer une habitude », styles d'apprentissage, dopamine = « hormone du plaisir », dépression = « simple déséquilibre chimique », sérotonine « hormone du bonheur », « le stress est toujours mauvais », catharsis (« crier libère la colère »), « 7 % des mots / 93 % non verbal »";
+const EVIDENCE = `EXACTITUDE (règle absolue, le Dr Fehmi est médecin psychiatre : zéro invention) :
+- Chaque affirmation doit être validée par la psychologie, la psychiatrie, la psychothérapie ou la psychoéducation actuelles : consensus (DSM-5-TR, CIM-11), recommandations (HAS, NICE, APA, OMS), méta-analyses et revues Cochrane, ou la source fournie. Dans le doute, ne le dis pas.
+- Jamais de chiffre, pourcentage, durée, statistique, étude, auteur ou citation qui ne figure pas dans les sources fournies.
+- Pas de mythes de pop-psychologie : ${MYTHS}.
+- Mécanismes cérébraux : simplifie sans déformer ; sinon parle du vécu et du comportement plutôt que des neurones.
+- Formulations justes : « aide souvent », « chez beaucoup de personnes », « les études montrent » (seulement si la source est fournie) ; jamais « guérit », « toujours », « 100 % », « miracle ».
+- Pas de diagnostic du spectateur (« tu es dépressif ») : décris des signes et invite à consulter. Distingue émotion normale et trouble.
+- Jamais de conseil dangereux : arrêt ou changement de traitement sans médecin, sevrage d'alcool ou de benzodiazépines seul, jeûne extrême. Sujet suicide ou automutilation : aucune méthode, toujours une ressource d'aide (en France le 3114 ; urgences 15 ou 112 ; ailleurs les urgences ou un professionnel).
+- Clair pour le grand public : mots simples, exemples concrets, une idée à la fois.`;
+function checkPrompt(items, ctx) {
+  return `Tu es médecin psychiatre et relecteur scientifique. Tu relis le texte d'une vidéo du Dr Fehmi (${ctx}) AVANT qu'il l'enregistre. Il exige ZÉRO erreur et zéro invention.
+Vérifie CHAQUE affirmation de chaque élément. Corrige seulement le FOND, jamais le style :
+- fait inventé, non vérifiable ou contraire au consensus actuel (DSM-5-TR, CIM-11, HAS, NICE, APA, OMS, méta-analyses, Cochrane) ;
+- chiffre, pourcentage, durée, étude, auteur ou citation absents des sources autorisées ci-dessous ;
+- généralisation ou promesse excessive (« guérit », « toujours », « prouvé » sans source) ;
+- mythe de pop-psychologie (${MYTHS}) ou mécanisme cérébral faux ;
+- diagnostic posé au spectateur, confusion entre émotion normale et trouble ;
+- conseil dangereux (traitement, sevrage alcool ou benzodiazépines, suicide sans ressource d'aide).
+Sources autorisées (techniques validées, vérifiées sur PubMed) :
+${TECHNIQUES.map(t => `- ${t.nom} : ${t.preuve}. Source : ${t.source}`).join("\n")}
+Faits exacts sur les apps du Dr Fehmi (à ne pas corriger s'ils sont repris tels quels) : ${Object.entries(APPS).map(([k, v]) => k + " : " + v).join(" ")}
+Une correction garde la même langue, le même ton parlé, une longueur proche (pas plus longue), et si possible les mots listés dans "garder". Si une affirmation ne peut pas être rendue exacte, remplace-la par une phrase exacte et utile sur le même point. Ne touche pas aux éléments justes.
+Éléments (JSON) :
+${JSON.stringify(items)}
+Réponds UNIQUEMENT en JSON : {"fixes": [{"id": "id de l'élément", "t": "texte corrigé", "why": "erreur corrigée, en 12 mots max"}]} — "fixes": [] si tout est exact.`;
+}
+// relit les textes et applique les corrections ; 2 essais, puis la vidéo reste marquée « non vérifiée »
+async function factCheck(items, ctx) {
+  for (let i = 0; i < 2; i++) {
+    try {
+      const j = parseJSON((await api("gen", { prompt: checkPrompt(items, ctx) })).text);
+      if (j && Array.isArray(j.fixes)) return { ok: true, fixes: j.fixes.filter(f => f && items.some(x => x.id === String(f.id)) && String(f.t || "").trim()).map(f => ({ id: String(f.id), t: String(f.t).trim(), why: String(f.why || "").slice(0, 120) })) };
+    } catch {}
+  }
+  return { ok: false, fixes: [] };
+}
+// vérifie les plans d'une vidéo animée (voix + textes affichés qui portent une affirmation)
+async function checkPlans(plans, ctx) {
+  const items = [];
+  plans.forEach((p, k) => {
+    items.push({ id: k + ".say", t: p.say, garder: [...(p.hot || []), p.word, p.stamp, p.steps?.at(-1)].filter(Boolean) });
+    if (p.card?.b) items.push({ id: k + ".card", t: p.card.b });
+    if (p.quote) items.push({ id: k + ".quote", t: p.quote });
+    if (p.left?.t) items.push({ id: k + ".left", t: p.left.t }, { id: k + ".right", t: p.right.t });
+    (p.items || []).forEach((x, n) => items.push({ id: `${k}.item${n}`, t: x.t }));
+  });
+  const res = await factCheck(items, ctx);
+  for (const f of res.fixes) {
+    const [k, field] = f.id.split("."), p = plans[+k]; if (!p) continue;
+    if (field === "say") {
+      p.say = f.t; const low = normW(f.t).join(" ");
+      p.hot = (p.hot || []).filter(h => low.includes(normW(h).join(" ")));
+      if ((p.gfx === "bigword" && !low.includes(normW(p.word).join(" "))) || (p.gfx === "stamp" && !low.includes(normW(p.stamp).join(" ")))) p.gfx = "none";
+    } else if (field === "card") p.card.b = f.t.slice(0, 60);
+    else if (field === "quote") p.quote = f.t.slice(0, 90);
+    else if (field === "left" || field === "right") p[field].t = f.t.slice(0, 50);
+    else if (field.startsWith("item")) p.items[+field.slice(4)].t = f.t.slice(0, 40);
+  }
+  return { ok: res.ok, n: res.fixes.length, why: res.fixes.map(f => f.why).filter(Boolean).slice(0, 8), at: new Date().toISOString().slice(0, 10) };
+}
+const checkPill = c => !c ? "" : c.ok ? `<span class="pill ok" title="${esc((c.why || []).join(" · "))}">🩺 vérifié${c.n ? ` · ${c.n} correction${c.n > 1 ? "s" : ""}` : ""}</span>` : `<span class="pill warn">⚠️ non vérifié</span>`;
 function cleanPlans(arr, max = 12) {
   return (arr || []).filter(p => p && String(p.say || "").trim()).slice(0, max).map(p => {
     const o = { say: String(p.say).trim(), title: String(p.title || "").slice(0, 60), img: PACK[p.img] ? p.img : "standing",
@@ -1321,10 +1398,11 @@ async function createR7(o, tries = 2) {
     throw new Error("Claude n'a pas rendu un script complet deux fois de suite. Réessaie dans une minute.");
   }
   const lang = o.lang === "ar" ? "عربي" : "Francais";
+  const check = await checkPlans(plans, `vidéo courte animée en ${o.lang === "ar" ? "arabe" : "français"}, sujet : ${o.topic}${o.source ? ` ; source fournie et autorisée : ${o.source}` : ""}`);
   const res = await api("create", { props: JSON.stringify({
     Name: { title: [{ text: { content: String(j.title || o.topic).slice(0, 200) } }] },
     Script: rt(plans.map(p => p.say).join("\n\n")), Description: rt(j.description), Hashtags: rt(j.hashtags), "Texte écran": rt(j.hook || plans[0].title),
-    "Scènes": rt(JSON.stringify({ style: "r7", ghost: String(j.ghost || "").slice(0, 20), music: MUSICS[j.music] ? j.music : "calme", technique: String(j.technique || ""), plans })), Production: { select: { name: "Visuels IA" } },
+    "Scènes": rt(JSON.stringify({ style: "r7", ghost: String(j.ghost || "").slice(0, 20), music: MUSICS[j.music] ? j.music : "calme", technique: String(j.technique || ""), check, plans })), Production: { select: { name: "Visuels IA" } },
     Type: { select: { name: "Short" } }, Language: { select: { name: lang } }, Channel: { select: { name: lang === "عربي" ? "Dr Fehmi AR" : "Fehmi Tlaies FR" } },
     "Pipeline Stage": { select: { name: "Script" } }, "Promo app": { checkbox: !!o.promo }, ...(o.link ? { "Source URL": { url: o.link } } : {})
   }) });
@@ -1347,6 +1425,7 @@ RÈGLES SPÉCIFIQUES VIDÉO LONGUE :
 - Au moins un chapitre explique une technique prouvée, étape par étape, avec sa source exacte (liste ci-dessous) ; jamais de chiffre ni d'étude inventés.
 - Conclusion (50 à 80 mots) : referme la boucle ouverte, récapitulatif en 3 points, quand consulter un professionnel, invitation à s'abonner et à regarder une autre vidéo du même thème.
 - Total : environ ${words} mots (répartis dans "words").
+${EVIDENCE}
 TECHNIQUES PROUVÉES :
 ${TECHNIQUES.map(t => `- [${t.id}] ${t.nom} — pour : ${t.pour}. Étapes : ${t.etapes}. Ce que l'étude montre : ${t.preuve}. Source : ${t.source}`).join("\n")}
 Réponds UNIQUEMENT en JSON : {"title": "titre YouTube, mot-clé en premier, 70 caractères max", "description": "4 à 6 phrases : la 1re contient le mot-clé principal ; résumé de ce qu'on apprend ; sans hashtags", "hashtags": "3 à 5 hashtags", "tags": "12 à 15 tags YouTube séparés par des virgules : mot-clé, variantes, longues traînes, questions", "technique": "id", "thumb": "texte de la MINIATURE : 2 à 4 mots percutants (émotion, curiosité, bénéfice), qui COMPLÈTENT le titre sans le répéter, honnêtes (la vidéo tient la promesse : jamais « CHOC », « INCROYABLE » ni de peur exagérée), ${o.lang === "ar" ? "en arabe" : "en français"}", "hl": "le mot de la miniature à colorer en ambre", "pose": "expression du Dr Fehmi sur la miniature, adaptée à l'émotion du sujet sans exagérer : ${Object.entries(POSES).map(([k, v]) => k + " (" + v + ")").join(", ")}", "chapters": [{"t": "titre du chapitre", "q": "question exacte tapée par les gens", "points": ["idée 1", "idée 2", "idée 3"], "words": 150}]}`;
@@ -1361,7 +1440,7 @@ CE CHAPITRE : « ${ch.t} » — répond à : ${ch.q}. Points : ${(ch.points || [
 Langue : ${longLang(o)}.
 ${k === 0 ? "C'est l'intro (45 à 70 mots, moins de 30 secondes) : 1re phrase = réponse directe à la question tapée, mot-clé principal prononcé dans les 10 premières secondes, promesse concrète, boucle ouverte (ce qu'on révèle à la fin). Pas de « Bonjour », pas de présentation longue." : k === out.chapters.length - 1 ? "C'est la conclusion : récapitule en 3 points, dis quand consulter un professionnel, invite à s'abonner et à regarder une autre vidéo du même thème." : "Le 1er plan pose la question du chapitre avec l'expression exacte (référencement), puis y répond concrètement : exemples du quotidien, étapes, erreurs fréquentes."}
 ${tech ? `Technique de la vidéo : ${tech.nom}. Étapes : ${tech.etapes}. Ce que l'étude montre : ${tech.preuve}. Source à citer telle quelle : ${tech.source}.` : ""}
-Interdit : inventer un chiffre, une étude ou un pourcentage ; poser un diagnostic ; conseil médical dangereux.
+${EVIDENCE}
 ${o.promo ? appRules(o.app || "Vague") : ""}
 Découpe en plans de 10 à 22 mots (1 ou 2 phrases, 14 mots max par phrase) : un changement d'image toutes les 6 à 10 secondes ; relances naturelles entre les idées (« Et c'est là que… », « Concrètement… »).
 - "title" : texte affiché à l'écran, 2 à 7 mots, l'idée du plan (pas une copie de la phrase).
@@ -1425,9 +1504,11 @@ async function longWrite(opt, out) {
       throw new Error(`le chapitre ${k + 1} n'a pas pu être écrit, réessaie dans une minute`);
     });
     const plans = res.flatMap((ps, k) => ps.map(p => ({ ...p, ch: k })));
+    b.textContent = "🩺 Relecture scientifique…";
+    const check = await checkPlans(plans, `vidéo YouTube longue en ${opt.lang === "ar" ? "arabe" : "français"} : ${out.title}`);
     const lang = opt.lang === "ar" ? "عربي" : "Francais";
     const fx = { style: "long", lang: opt.lang, kw: opt.kw || [], technique: String(out.technique || ""), music: "calme", speed: 1.1,
-      chapters: out.chapters.map(c => String(c.t || "").slice(0, 90)), tags: String(out.tags || "").slice(0, 500), desc0: String(out.description || "").slice(0, 1800), thumb: String(out.thumb || "").slice(0, 40), hl: String(out.hl || "").slice(0, 20), pose: POSES[out.pose] ? out.pose : "point", plans, voices: [] };
+      chapters: out.chapters.map(c => String(c.t || "").slice(0, 90)), tags: String(out.tags || "").slice(0, 500), desc0: String(out.description || "").slice(0, 1800), thumb: String(out.thumb || "").slice(0, 40), hl: String(out.hl || "").slice(0, 20), pose: POSES[out.pose] ? out.pose : "point", check, plans, voices: [] };
     await api("create", { props: JSON.stringify({
       Name: { title: [{ text: { content: String(out.title || opt.topic).slice(0, 100) } }] },
       Script: rt(fx.chapters.map((c, k) => `## ${k ? k + ". " : ""}${c}\n\n` + plans.filter(p => p.ch === k).map(p => p.say).join("\n\n")).join("\n\n")),
@@ -1443,7 +1524,7 @@ function longCard(r) {
   const n = r.fx.chapters?.length || 0, v = (r.fx.voices || []).filter(Boolean).length, job = rx.get(r.id), wait = job && !job.done && !r.link;
   return `<div class="card"><span style="width:24px;flex:none;text-align:center" aria-hidden="true">📺</span>
     <div class="b"><div class="t" dir="auto" data-edit="${r.id}">${esc(r.name)} <span class="small">✎</span></div>
-      <div class="meta"><span class="pill">${isAr(r) ? "AR" : "FR"}</span><span class="pill">YouTube 16:9</span><span class="pill">${n} chapitres · ~${longMin(r)} min</span>
+      <div class="meta"><span class="pill">${isAr(r) ? "AR" : "FR"}</span><span class="pill">YouTube 16:9</span><span class="pill">${n} chapitres · ~${longMin(r)} min</span>${checkPill(r.fx.check)}
       ${wait ? `<span class="pill warn">⏳ montage en cours</span>` : r.link ? `<span class="pill ok">vidéo prête</span>` : `<span class="pill ${v === n ? "ok" : "warn"}">🎙 ${v}/${n} chapitres enregistrés</span>`}</div></div>
     <button class="go" data-long="${r.id}" aria-label="Ouvrir la vidéo longue">${wait ? "⏳" : "📺"}</button></div>
     ${r.link ? `<div class="vbox" data-v="${esc(r.link)}" style="margin:-4px 0 12px"><div class="row"><button class="ghost vplay">▶ Regarder</button><button class="pri" data-pub="${r.id}">🚀 Publier</button></div></div><div class="row" style="margin:-4px 0 12px">${trButton(r)}</div>` : ""}`;
@@ -1661,7 +1742,9 @@ async function translateLong(r, btn) {
       throw new Error(`chapitre ${k + 1} : adaptation incomplète, réessaie`);
     });
     const plans = res.flat();
-    const nfx = { ...fx, lang: to === "عربي" ? "ar" : "fr", chapters: fx.chapters.map((c, k) => String(meta.chapters[k] || c).slice(0, 90)), tags: String(meta.tags || "").slice(0, 500), desc0: String(meta.description || "").slice(0, 1800), plans, voices: [], chaptersAt: [] };
+    btn.textContent = "🩺 Relecture…";
+    const check = await checkPlans(plans, `version ${lab} d'une vidéo YouTube longue : ${meta.title}`);
+    const nfx = { ...fx, check, lang: to === "عربي" ? "ar" : "fr", chapters: fx.chapters.map((c, k) => String(meta.chapters[k] || c).slice(0, 90)), tags: String(meta.tags || "").slice(0, 500), desc0: String(meta.description || "").slice(0, 1800), plans, voices: [], chaptersAt: [] };
     await api("create", { props: JSON.stringify({
       Name: { title: [{ text: { content: String(meta.title).slice(0, 100) } }] },
       Script: rt(nfx.chapters.map((c, k) => `## ${c}\n\n` + plans.filter(p => p.ch === k).map(p => p.say).join("\n\n")).join("\n\n")),
@@ -1751,7 +1834,7 @@ function r7Card(r) {
   const job = rx.get(r.id), wait = job && !r.link;
   return `<div class="card"><span style="width:24px;flex:none;text-align:center" aria-hidden="true">🎙</span>
     <div class="b"><div class="t" dir="auto" data-edit="${r.id}">${esc(r.name)} <span class="small">✎</span></div>
-      <div class="meta"><span class="pill">${isAr(r) ? "AR" : "FR"}</span><span class="pill">${r.fx.plans.length} plans</span><span class="pill">ambre</span>
+      <div class="meta"><span class="pill">${isAr(r) ? "AR" : "FR"}</span><span class="pill">${r.fx.plans.length} plans</span><span class="pill">ambre</span>${checkPill(r.fx.check)}
       ${wait ? `<span class="pill warn">⏳ montage en cours</span>` : r.link ? `<span class="pill ok">vidéo prête</span>` : `<span class="pill warn">voix à enregistrer</span>`}${r.cost != null ? `<span class="pill">💲 ${money(r.cost)}</span>` : ""}</div></div>
     ${wait ? `<button class="go" data-rwait="${r.id}" aria-label="Voir l'avancement du montage">⏳</button>` : `<button class="go" data-voice="${r.id}" aria-label="${r.link ? "Refaire" : "Enregistrer"} la voix">🎙</button>`}</div>
     ${r.link ? `<div class="vbox" data-v="${esc(r.link)}" style="margin:-4px 0 12px"><div class="row"><button class="ghost vplay">▶ Regarder</button><button class="pri" data-pub="${r.id}">🚀 Publier</button></div></div><div class="row" style="margin:-4px 0 12px">${trButton(r)}</div>` : ""}`;
