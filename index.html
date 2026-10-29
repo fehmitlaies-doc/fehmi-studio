@@ -174,7 +174,7 @@ h1{font-size:22px;margin:0}
 <script>
 const API = "https://hook.eu1.make.com/0jj57vomxlae4srwpwj6m74kdrkk24p2";
 // Mise à jour automatique : l'iPhone garde l'ancienne page en cache ; on compare avec la version en ligne et on recharge
-const BUILD = "2026-10-29.6";
+const BUILD = "2026-10-29.7";
 async function checkUpdate() {
   try {
     const t = await (await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" })).text();
@@ -288,9 +288,16 @@ function render() {
       ${r.fx ? `<button class="go" data-make="${r.id}" aria-label="${r.link ? "Refaire" : "Produire"} la vidéo sans visage">🎞</button>` : `<button class="go" data-one="${r.id}" aria-label="Tourner ce script">▶</button>`}</div>
       ${r.fx && r.link ? `<div class="vbox" data-v="${esc(r.link)}" style="margin:-4px 0 12px"><div class="row"><button class="ghost vplay">▶ Regarder</button><button class="pri" data-pub="${r.id}">🚀 Publier</button></div></div>` : ""}`).join("");
   const n = S.sel.size;
+  if (S.focus && !S.loading) { const c = document.querySelector(`[data-edit="${S.focus}"]`)?.closest(".card"); if (c) { S.focus = null; c.scrollIntoView({ block: "center", behavior: "smooth" }); c.style.outline = "2px solid var(--ok)"; setTimeout(() => c.style.outline = "", 4000); } }
   $("#bShoot").textContent = `Tourner (${n})`; $("#bShoot").disabled = !n;
   $("#bDel").hidden = !n; $("#bDel").textContent = `🗑 ${n}`;
   renderQueue();
+}
+// nouvelle vidéo : le filtre de langue passe sur sa langue (sinon elle serait cachée) et sa carte est mise en avant
+function showNew(lang, id) {
+  if (S.lang !== "all" && S.lang !== lang) { S.lang = lang; store.set("lang", lang); }
+  if (id) S.focus = String(id).replace(/-/g, "");
+  if (S.tab === "shoot") load();
 }
 $("#langSeg").onclick = e => { const l = e.target.dataset.l; if (!l) return; S.lang = l; store.set("lang", l); render(); };
 $("#list").onclick = e => {
@@ -482,11 +489,11 @@ async function translateVideo(r, btn) {
       props.Script = rt(c.fixes[0]?.t || j.script);
       if (!c.ok) toast("Relecture scientifique indisponible : relis bien ce script.", 6000);
     }
-    await api("create", { props: JSON.stringify(props) });
+    const res = await api("create", { props: JSON.stringify(props) });
     trDone[r.id] = 1; store.set("tr", trDone);
     btn.outerHTML = `<span class="pill ok" style="align-self:center">✓ version ${lab === "arabe" ? "AR" : "FR"} créée</span>`;
-    toast(`Version ${lab} créée : elle est dans 🎬 Tourner.`, 5000);
-    if (S.tab === "shoot") load();
+    toast(`Version ${lab} créée : elle est dans 🎬 Tourner, filtre ${to === "عربي" ? "AR" : "FR"}.`, 6000);
+    showNew(to, res?.id);
   } catch (e) { btn.disabled = false; btn.textContent = old; toast(e.message, 6000); }
 }
 
@@ -924,7 +931,7 @@ $("#bNew").onclick = () => {
       try {
         const lang = opt.lang === "عربي" ? "ar" : "fr";
         await pool(Array.from({ length: opt.n }, (_, k) => k), 3, k => createR7({ topic: opt.n > 1 ? `${opt.topic} (angle n° ${k + 1} sur ${opt.n}, différent des autres)` : opt.topic, lang, kw: opt.kw, promo: opt.promo, app: opt.app }));
-        $("#sheet").innerHTML = ""; toast(`${opt.n} vidéo${opt.n > 1 ? "s" : ""} au style ambre : appuie sur 🎙 pour enregistrer ta voix.`, 5000); load();
+        $("#sheet").innerHTML = ""; toast(`${opt.n} vidéo${opt.n > 1 ? "s" : ""} au style ambre : appuie sur 🎙 pour enregistrer ta voix.`, 5000); showNew(opt.lang);
       } catch (e) { btn.disabled = false; btn.textContent = "Écrire"; $("#gOut").innerHTML = `<div class="err">${esc(e.message)}</div>`; }
       return;
     }
@@ -949,7 +956,7 @@ $("#bNew").onclick = () => {
           "Pipeline Stage": { select: { name: "Script" } }, "Promo app": { checkbox: opt.promo }
         }) });
       }
-      $("#sheet").innerHTML = ""; toast(mode === "fx" ? `${done} vidéo${done > 1 ? "s" : ""} sans visage prête${done > 1 ? "s" : ""} : appuie sur 🎞 pour produire.` : `${done} script${done > 1 ? "s" : ""} ajouté${done > 1 ? "s" : ""}.`); load();
+      $("#sheet").innerHTML = ""; toast(mode === "fx" ? `${done} vidéo${done > 1 ? "s" : ""} sans visage prête${done > 1 ? "s" : ""} : appuie sur 🎞 pour produire.` : `${done} script${done > 1 ? "s" : ""} ajouté${done > 1 ? "s" : ""}.`); showNew(opt.lang);
     } catch (e) { btn.disabled = false; btn.textContent = "Écrire"; $("#gOut").innerHTML = `<div class="err">${esc(e.message)}</div>`; }
   };
 };
@@ -1520,14 +1527,14 @@ async function longWrite(opt, out) {
     const lang = opt.lang === "ar" ? "عربي" : "Francais";
     const fx = { style: "long", lang: opt.lang, ...(opt.lang === "ar" ? { dialect: arDia() } : {}), kw: opt.kw || [], technique: String(out.technique || ""), music: "calme", speed: 1.1,
       chapters: out.chapters.map(c => String(c.t || "").slice(0, 90)), tags: String(out.tags || "").slice(0, 500), desc0: String(out.description || "").slice(0, 1800), thumb: String(out.thumb || "").slice(0, 40), hl: String(out.hl || "").slice(0, 20), pose: POSES[out.pose] ? out.pose : "point", check, plans, voices: [] };
-    await api("create", { props: JSON.stringify({
+    const newRes = await api("create", { props: JSON.stringify({
       Name: { title: [{ text: { content: String(out.title || opt.topic).slice(0, 100) } }] },
       Script: rt(fx.chapters.map((c, k) => `## ${k ? k + ". " : ""}${c}\n\n` + plans.filter(p => p.ch === k).map(p => p.say).join("\n\n")).join("\n\n")),
       Description: rt(fx.desc0), Hashtags: rt(out.hashtags), "Texte écran": rt(fx.chapters[0]), "Scènes": rt(JSON.stringify(fx)),
       Production: { select: { name: "Visuels IA" } }, Type: { select: { name: "Video Long" } }, Language: { select: { name: lang } },
       Channel: { select: { name: lang === "عربي" ? "Dr Fehmi AR" : "Fehmi Tlaies FR" } }, "Pipeline Stage": { select: { name: "Script" } }, "Promo app": { checkbox: !!opt.promo }
     }) });
-    $("#sheet").innerHTML = ""; toast("Vidéo longue prête à enregistrer : touche 📺 sur sa carte.", 5000); load();
+    $("#sheet").innerHTML = ""; toast("Vidéo longue prête à enregistrer : touche 📺 sur sa carte.", 5000); showNew(lang, newRes?.id);
   } catch (e) { b.disabled = false; $("#oAgain").disabled = false; b.textContent = "✓ Écrire le script"; toast(e.message, 6000); }
 }
 
@@ -1757,7 +1764,7 @@ async function translateLong(r, btn) {
     btn.textContent = "🩺 Relecture…";
     const check = await checkPlans(plans, `version ${lab} d'une vidéo YouTube longue : ${meta.title}`);
     const nfx = { ...fx, check, lang: to === "عربي" ? "ar" : "fr", dialect: to === "عربي" ? arDia() : undefined, chapters: fx.chapters.map((c, k) => String(meta.chapters[k] || c).slice(0, 90)), tags: String(meta.tags || "").slice(0, 500), desc0: String(meta.description || "").slice(0, 1800), plans, voices: [], chaptersAt: [] };
-    await api("create", { props: JSON.stringify({
+    const longRes = await api("create", { props: JSON.stringify({
       Name: { title: [{ text: { content: String(meta.title).slice(0, 100) } }] },
       Script: rt(nfx.chapters.map((c, k) => `## ${c}\n\n` + plans.filter(p => p.ch === k).map(p => p.say).join("\n\n")).join("\n\n")),
       Description: rt(nfx.desc0), Hashtags: rt(meta.hashtags), "Texte écran": rt(nfx.chapters[0]), "Scènes": rt(JSON.stringify(nfx)),
@@ -1766,7 +1773,7 @@ async function translateLong(r, btn) {
     }) });
     trDone[r.id] = 1; store.set("tr", trDone);
     btn.outerHTML = `<span class="pill ok" style="align-self:center">✓ version ${lab === "arabe" ? "AR" : "FR"} créée</span>`;
-    toast(`Version ${lab} créée : elle est dans 🎬 Tourner.`, 5000); if (S.tab === "shoot") load();
+    toast(`Version ${lab} créée : elle est dans 🎬 Tourner, filtre ${to === "عربي" ? "AR" : "FR"}.`, 6000); showNew(to, longRes?.id);
   } catch (e) { btn.disabled = false; btn.textContent = old; toast(e.message, 6000); }
 }
 
