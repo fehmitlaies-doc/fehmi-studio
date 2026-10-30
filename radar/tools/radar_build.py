@@ -86,6 +86,9 @@ for i, w in enumerate(words):  # mots non reconnus : entre leurs voisins
         prev = next((words[j]['e'] for j in range(i - 1, -1, -1) if 'e' in words[j]), 0.1)
         nxt = next((words[j]['s'] for j in range(i + 1, len(words)) if 's' in words[j]), src_dur)
         w['s'], w['e'] = prev, min(nxt, prev + 0.3)
+for a, b in zip(words, words[1:]):  # minutage toujours croissant : deux sous-titres ne peuvent jamais s'afficher ensemble
+    if b['s'] < a['s']: b['s'] = a['s']
+    if b['e'] < b['s'] + 0.05: b['e'] = b['s'] + 0.05
 
 # silences de plus de 0,55 s ramenés à 0,3 s : rythme serré, meilleure rétention
 for a, b in zip(words, words[1:]):
@@ -288,7 +291,8 @@ for i, p in enumerate(plans):
     elif g == 'bigword' and p.get('word'):  # mot-choc géant : rupture de rythme
         kw = norm(str(p['word']).split()[0])
         t0 = next((w['s'] for w in pw if kw and norm(w['t']).startswith(kw[:5])), a + .4)
-        h.append(f'<div class="bigw" id="bw{i}">{H.escape(str(p["word"]))}</div>')
+        fs = min(170, int(960 / (0.62 * max(1, len(str(p['word']))))))  # mot long : réduit pour rester dans l'image
+        h.append(f'<div class="bigw" id="bw{i}" style="font-size:{fs}px">{H.escape(str(p["word"]))}</div>')
         js.append(f'tl.fromTo("#bw{i}",{{opacity:0,scale:2.2}},{{opacity:1,scale:1,duration:.3,ease:"expo.out"}},{t0:.2f});tl.to("#bw{i}",{{opacity:0,scale:.9,duration:.3,ease:"power2.in"}},{min(b - .1, t0 + 1.4):.2f});')
         js.append(f'tl.fromTo("#i{i}",{{x:0}},{{x:10,duration:.05,yoyo:true,repeat:5,ease:"none"}},{t0:.2f});')
         SFX.append(('impact', t0, -10))
@@ -315,7 +319,7 @@ for gi, gr in enumerate(groups):
         if 'class="hot"' in word_html(w):
             js.append(f'tl.fromTo("#h{gi}_{k}",{{color:"#FFF4DC"}},{{color:"#F2A541",duration:.35,ease:"power1.out",immediateRender:false}},{w["s"]:.2f});')
     s0 = gr[0]['s']
-    nxt = groups[gi + 1][0]['s'] if gi + 1 < len(groups) else END
+    nxt = min([g[0]['s'] for g in groups[gi + 1:]] + [END])  # caché dès qu'un sous-titre suivant apparaît
     e0 = min(max(gr[-1]['e'] + .12, s0 + .5), nxt)
     if e0 - s0 < .12: continue  # minutage incohérent : on ne montre pas ce sous-titre plutôt que de le laisser figé
     js.append(f'tl.fromTo("#c{gi}",{{opacity:0,y:16}},{{opacity:1,y:0,duration:.18,ease:"power2.out"}},{s0:.2f});tl.set("#c{gi}",{{opacity:0}},{e0:.2f});')

@@ -174,7 +174,7 @@ h1{font-size:22px;margin:0}
 <script>
 const API = "https://hook.eu1.make.com/0jj57vomxlae4srwpwj6m74kdrkk24p2";
 // Mise à jour automatique : l'iPhone garde l'ancienne page en cache ; on compare avec la version en ligne et on recharge
-const BUILD = "2026-10-29.9";
+const BUILD = "2026-10-30.1";
 async function checkUpdate() {
   try {
     const t = await (await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" })).text();
@@ -377,7 +377,7 @@ async function loadTrack() {
       const pr = p.properties || {};
       return { r: row(p), name: plain(pr.Name?.title) || "Sans titre", lang: pr.Language?.select?.name || "", st: pr["Statut publication"]?.select?.name || "",
         stage: pr["Pipeline Stage"]?.select?.name || "", prod: pr.Production?.select?.name || "", cost: pr["Coût ($)"]?.number ?? null, date: pr["Publish Date"]?.date?.start || "",
-        links: (plain(pr["Liens publiés"]?.rich_text) + " " + (pr["Published URL"]?.url || "")).match(/https?:\/\/\S+/g) || [], video: (pr.Link?.url || "").replace("www.dropbox.com", "dl.dropboxusercontent.com") };
+        links: (plain(pr["Liens publiés"]?.rich_text) + " " + (pr["Published URL"]?.url || "")).match(/https?:\/\/\S+/g) || [], video: (pr.Link?.url || "").replace("www.dropbox.com", "dl.dropboxusercontent.com"), thumb: pr["Thumbnail URL"]?.url || "" };
     }).filter(i => S.lang === "all" || i.lang === S.lang);
     S.track = items;
     el.innerHTML = !items.length ? `<div class="empty">Rien de programmé pour l'instant.</div>` : items.map(i => {
@@ -386,7 +386,7 @@ async function loadTrack() {
       return `<div class="card"><div class="b"><div class="t" dir="auto">${esc(i.name)}</div>
         <div class="meta"><span class="pill">${i.lang === "عربي" ? "AR" : "FR"}</span><span class="pill ${cls}">${esc(i.st || i.stage)}</span>${i.prod ? `<span class="pill">${esc(i.prod)}</span>` : ""}${d ? `<span class="pill">${esc(d)}</span>` : ""}${i.cost != null ? `<span class="pill">💲 ${money(i.cost)}</span>` : ""}</div>
         ${i.video ? `<div class="vbox" data-v="${esc(i.video)}"><button class="ghost vplay">▶ Regarder${i.st === "Sous-titrage" ? " (sous-titres en cours…)" : ""}</button></div>` : ""}
-        ${i.links.length ? `<div class="links small" style="margin-top:6px">${[...new Set(i.links)].map(u => `<a href="${esc(u)}" target="_blank" rel="noopener">${/tiktok/.test(u) ? "TikTok" : /youtu/.test(u) ? "YouTube" : "lien"}</a>`).join("")}</div>` : ""}
+        ${i.links.length || i.thumb ? `<div class="links small" style="margin-top:6px">${[...new Set(i.links)].map(u => `<a href="${esc(u)}" target="_blank" rel="noopener">${/tiktok/.test(u) ? "TikTok" : /youtu/.test(u) ? "YouTube" : "lien"}</a>`).join("")}${i.thumb ? `<a href="${esc(i.thumb)}" target="_blank" rel="noopener" download="miniature.jpg" title="Si YouTube ne l'a pas prise : enregistre-la puis ajoute-la dans YouTube Studio">🖼 Miniature</a>` : ""}</div>` : ""}
         <div class="row" style="margin-top:8px">${editable(i) ? `<button class="ghost" data-pedit="${i.r.id}">✎ Modifier</button>` : `<span class="small" style="align-self:center">En ligne : TikTok et YouTube ne permettent plus de changer le texte d'ici.</span>`}${trButton(i.r)}${clipBtn(i)}</div>
       </div></div>`;
     }).join("") + `<div class="small" style="text-align:center;margin-top:10px">« En attente » part à l'heure prévue (vérifié toutes les 30 min) · « Envoyé » = en cours chez TikTok/YouTube · liens directs vers les vidéos ajoutés automatiquement (≈ 30 min après l'envoi).</div>

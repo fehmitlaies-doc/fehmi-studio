@@ -86,6 +86,9 @@ for i, w in enumerate(words):  # mots non reconnus : entre leurs voisins
         prev = next((words[j]['e'] for j in range(i - 1, -1, -1) if 'e' in words[j]), 0.1)
         nxt = next((words[j]['s'] for j in range(i + 1, len(words)) if 's' in words[j]), src_dur)
         w['s'], w['e'] = prev, min(nxt, prev + 0.3)
+for a, b in zip(words, words[1:]):  # minutage toujours croissant : deux sous-titres ne peuvent jamais s'afficher ensemble
+    if b['s'] < a['s']: b['s'] = a['s']
+    if b['e'] < b['s'] + 0.05: b['e'] = b['s'] + 0.05
 
 # format long : rythme posé, silences de plus de 0,8 s ramenés à 0,45 s (0,9 s entre deux chapitres)
 for a, b in zip(words, words[1:]):
@@ -176,7 +179,7 @@ body{{margin:0;width:{W}px;height:{HT}px;overflow:hidden;background:#17121C}}
 .sr{{background:rgba(242,165,65,.16);border:2px solid #F2A541}} .sr small{{color:#F2A541}}
 .quote{{position:absolute;left:{TL}px;width:{TWID}px;box-sizing:border-box;top:440px;background:rgba(23,18,28,.85);border-radius:24px;padding:10px 30px 26px;text-align:start;direction:{DIR};font-family:"{TF}";font-weight:800;font-style:{"normal" if AR else "italic"};font-size:46px;line-height:1.22;color:#F6EEE3;opacity:0}}
 .quote:before{{content:"“";display:block;font-size:100px;line-height:.6;color:#F2A541}}
-.bigw{{position:absolute;left:0;right:0;top:400px;text-align:center;font-family:"{TF}";font-weight:800;font-size:{140 if AR else 160}px;line-height:1;color:#F2A541;text-shadow:0 10px 40px rgba(23,18,28,.9),0 0 4px #17121C;opacity:0}}
+.bigw{{position:absolute;left:{TL}px;width:{TWID}px;top:470px;text-align:start;direction:{DIR};font-family:"{TF}";font-weight:800;font-size:{140 if AR else 160}px;line-height:1;color:#F2A541;text-shadow:0 10px 40px rgba(23,18,28,.9),0 0 4px #17121C;opacity:0}}
 .stamp{{position:absolute;left:{IL + (40 if AR else 440)}px;top:150px;font-family:"{TF}";font-weight:800;font-size:96px;color:#F2A541;border:9px solid #F2A541;border-radius:16px;padding:0 26px;background:rgba(23,18,28,.85);opacity:0}}
 .timer{{position:absolute;left:{TL + TWID // 2 - 100}px;top:480px;width:200px;height:200px;opacity:0}}
 .timer span{{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:"Fraunces";font-weight:800;font-size:96px;color:#F6EEE3}}
@@ -228,7 +231,7 @@ for i, p in enumerate(plans):
     if i in chap_start: a = min(a + 2.1, b - 1.0)  # le plan entre après la carte de chapitre
     same_prev = i and plans[i - 1]['_file'] == p['_file']
     same_next = i < len(plans) - 1 and plans[i + 1]['_file'] == p['_file']
-    solo = (p.get('gfx') or 'none') in ('none', 'pulse', 'ring', 'bigword', 'stamp')  # rien dans la colonne : titre centré, plus grand
+    solo = (p.get('gfx') or 'none') in ('none', 'pulse', 'ring', 'stamp')  # rien dans la colonne : titre centré, plus grand
     h.append(f'<div class="ttl{" solo" if solo else ""}" id="t{i}"><span>{H.escape(nb(p.get("title", "")))}</span></div>')
     h.append(f'<div class="ill" id="i{i}"><img src="assets/{p["_file"]}"></div>')
     if i == 0:  # accroche : image visible dès la 1re image, coup de zoom (pas de fondu depuis le noir)
@@ -320,7 +323,8 @@ for i, p in enumerate(plans):
     elif g == 'bigword' and p.get('word'):  # mot-choc géant : rupture de rythme
         kw = norm(str(p['word']).split()[0])
         t0 = next((w['s'] for w in pw if kw and norm(w['t']).startswith(kw[:5])), a + .4)
-        h.append(f'<div class="bigw" id="bw{i}">{H.escape(str(p["word"]))}</div>')
+        fs = min(150, int(TWID / (0.62 * max(1, len(str(p['word']))))))  # tient dans la colonne de texte, sous le titre
+        h.append(f'<div class="bigw" id="bw{i}" style="font-size:{fs}px">{H.escape(str(p["word"]))}</div>')
         js.append(f'tl.fromTo("#bw{i}",{{opacity:0,scale:2.2}},{{opacity:1,scale:1,duration:.3,ease:"expo.out"}},{t0:.2f});tl.to("#bw{i}",{{opacity:0,scale:.9,duration:.3,ease:"power2.in"}},{min(b - .1, t0 + 1.4):.2f});')
         js.append(f'tl.fromTo("#i{i}",{{x:0}},{{x:10,duration:.05,yoyo:true,repeat:5,ease:"none"}},{t0:.2f});')
         SFX.append(('impact', t0, -10))
@@ -347,7 +351,7 @@ for gi, gr in enumerate(groups):
         if 'class="hot"' in word_html(w):
             js.append(f'tl.fromTo("#h{gi}_{k}",{{color:"#FFF4DC"}},{{color:"#F2A541",duration:.35,ease:"power1.out",immediateRender:false}},{w["s"]:.2f});')
     s0 = gr[0]['s']
-    nxt = groups[gi + 1][0]['s'] if gi + 1 < len(groups) else END
+    nxt = min([g[0]['s'] for g in groups[gi + 1:]] + [END])  # caché dès qu'un sous-titre suivant apparaît
     e0 = min(max(gr[-1]['e'] + .12, s0 + .5), nxt)
     if e0 - s0 < .12: continue  # minutage incohérent : on ne montre pas ce sous-titre plutôt que de le laisser figé
     js.append(f'tl.fromTo("#c{gi}",{{opacity:0,y:16}},{{opacity:1,y:0,duration:.18,ease:"power2.out"}},{s0:.2f});tl.set("#c{gi}",{{opacity:0}},{e0:.2f});')
