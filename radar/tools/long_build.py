@@ -155,7 +155,7 @@ body{{margin:0;width:{W}px;height:{HT}px;overflow:hidden;background:#17121C}}
 .ttl.solo{{top:0;height:{HT - 160}px;display:flex;align-items:center;font-size:{70 if AR else 78}px}}
 .ill{{position:absolute;left:{IL}px;top:160px;width:760px;height:760px;opacity:0}}
 .ill img{{width:100%;height:100%;object-fit:cover;display:block;-webkit-mask-image:radial-gradient(circle,#000 52%,transparent 71%);mask-image:radial-gradient(circle,#000 52%,transparent 71%)}}
-.cap{{position:absolute;top:952px;left:220px;right:220px;text-align:center;direction:{DIR};font-family:"{CF}";font-weight:800;font-size:44px;line-height:{1.3 if AR else 1.12};color:#F6EEE3;opacity:0;text-shadow:0 2px 12px rgba(10,7,12,.9)}}
+.cap{{position:absolute;z-index:50;top:952px;left:220px;right:220px;text-align:center;direction:{DIR};font-family:"{CF}";font-weight:800;font-size:44px;line-height:{1.3 if AR else 1.12};color:#F6EEE3;opacity:0;text-shadow:0 2px 12px rgba(10,7,12,.9)}}
 .cap span{{display:inline-block;margin:0 7px}}
 .hot{{color:#F2A541}}
 .g{{position:absolute;opacity:0}}
@@ -183,7 +183,7 @@ body{{margin:0;width:{W}px;height:{HT}px;overflow:hidden;background:#17121C}}
 .stamp{{position:absolute;left:{IL + (40 if AR else 440)}px;top:150px;font-family:"{TF}";font-weight:800;font-size:96px;color:#F2A541;border:9px solid #F2A541;border-radius:16px;padding:0 26px;background:rgba(23,18,28,.85);opacity:0}}
 .timer{{position:absolute;left:{TL + TWID // 2 - 100}px;top:480px;width:200px;height:200px;opacity:0}}
 .timer span{{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:"Fraunces";font-weight:800;font-size:96px;color:#F6EEE3}}
-.chap{{position:absolute;inset:0;z-index:40;background:rgba(23,18,28,.94);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;opacity:0;direction:{DIR}}}
+.chap{{position:absolute;inset:0;z-index:40;background:#17121C;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;opacity:0;direction:{DIR}}}
 .chap small{{font-family:"Archivo","Cairo";font-weight:800;font-size:34px;letter-spacing:{0 if AR else 8}px;color:#F2A541;text-transform:uppercase}}
 .chap b{{max-width:1400px;text-align:center;font-family:"{TF}";font-weight:800;font-size:{80 if AR else 88}px;line-height:1.12;color:#F6EEE3}}
 .chap i{{width:120px;height:6px;border-radius:3px;background:#F2A541}}
@@ -229,6 +229,7 @@ chap_start = {i0 for c, i0, t0 in chs[1:]}
 for i, p in enumerate(plans):
     a, b, fu = starts[i], ends[i], 0.45
     if i in chap_start: a = min(a + 2.1, b - 1.0)  # le plan entre après la carte de chapitre
+    if i + 1 in chap_start: b = max(a + .3, b - .2)  # et le plan d'avant est déjà sorti quand la carte arrive
     same_prev = i and plans[i - 1]['_file'] == p['_file']
     same_next = i < len(plans) - 1 and plans[i + 1]['_file'] == p['_file']
     solo = (p.get('gfx') or 'none') in ('none', 'pulse', 'ring', 'stamp')  # rien dans la colonne : titre centré, plus grand
@@ -250,7 +251,7 @@ for i, p in enumerate(plans):
     if img in ('journal',): SFX.append(('scribble', a + 0.4, -18))
     if img in ('clock_night',): SFX.append(('tick', a + 0.3, -14)); SFX.append(('tick', a + 1.3, -14))
     if i < len(plans) - 1:
-        js.append(f'tl.set("#t{i}",{{opacity:0}},{b:.2f});tl.set("#i{i}",{{opacity:0}},{b + (0 if same_next else fu):.2f});')
+        js.append(f'tl.set("#t{i}",{{opacity:0}},{b:.2f});tl.set("#i{i}",{{opacity:0}},{b + (0 if same_next or i + 1 in chap_start else fu):.2f});')
     pw = [w for w in words if w['p'] == i]
     g = p.get('gfx') or 'none'
     if g == 'ring':  # anneau ambre qui se dessine pendant le plan
