@@ -10,7 +10,7 @@ D = sys.argv[1]
 W, HT, FLOOR = 1080, 1920, 1300
 job = json.load(open(f'{D}/job.json'))
 AR = job.get('lang') == 'ar'
-KIND = job.get('kind') if job.get('kind') in ('cartons', 'portes', 'attaches') else 'cartons'
+KIND = job.get('kind') if job.get('kind') in ('cartons', 'portes', 'attaches', 'marches') else 'cartons'
 beats = [b for b in job.get('beats', []) if str(b.get('txt') or b.get('say') or '').strip() or b.get('act') in ('rise', 'card', 'end')]
 LABELS = [str(x)[:22] for x in (job.get('labels') or [])][:6] or ['…']
 VOICE = os.path.exists(f'{D}/assets/voice.m4a')
@@ -24,7 +24,7 @@ def norm(s):
     return re.sub(r'[\W_]+', '', s)
 
 # 1. minutage : la voix réelle (mots horodatés) ou le temps de lecture
-MIN = {'drop': .8, 'unload': .75, 'close': .9, 'open': .6, 'cut': .9, 'relink': .8}
+MIN = {'drop': .8, 'unload': .75, 'close': .9, 'open': .6, 'cut': .9, 'relink': .8, 'fall': .85, 'climb': .75}
 def need(b):  # durée minimale d'un temps fort, selon le texte et l'animation
     n = len(str(b.get('txt', '')).split())
     base = max(2.0, 1.1 + n * (.42 if AR else .36))
@@ -39,7 +39,7 @@ def spread(act):  # répartit les éléments (cartons, portes, attaches) sur les
     idx = [i for i, a in enumerate(acts) if a == act]
     for j, i in enumerate(idx):
         beats[i]['_n'] = len(LABELS) // len(idx) + (1 if j < len(LABELS) % len(idx) else 0)
-for a in ('drop', 'unload', 'close', 'open', 'cut', 'relink'): spread(a)
+for a in ('drop', 'unload', 'close', 'open', 'cut', 'relink', 'fall', 'climb'): spread(a)
 
 words = []
 for bi, b in enumerate(beats):
@@ -69,7 +69,7 @@ if VOICE and words:
     # chaque temps fort garde au moins le temps de son animation : on insère du silence dans la voix si besoin
     def hold(b):
         a, n = b.get('act'), b.get('_n', 1)
-        return {'card': 4.4, 'end': 4.2, 'drop': .7 * n + .5, 'unload': .65 * n + .5, 'close': .75 * n + .5, 'open': .55 * n + .5, 'cut': .8 * n + .5, 'relink': .7 * n + .6, 'small': 2.4, 'rise': 2.0}.get(a, 1.6)
+        return {'card': 4.4, 'end': 4.2, 'drop': .7 * n + .5, 'unload': .65 * n + .5, 'close': .75 * n + .5, 'open': .55 * n + .5, 'cut': .8 * n + .5, 'relink': .7 * n + .6, 'fall': .8 * n + .6, 'climb': .7 * n + .5, 'kind': 2.4, 'small': 2.4, 'rise': 2.0}.get(a, 1.6)
     seg = [(o[i], o[i + 1] if i + 1 < len(o) else dur) for i in range(len(o))]
     starts, t = [], 0.0
     for i, (a, b) in enumerate(seg): starts.append(t); t += max(b - a, hold(beats[i]))
@@ -307,6 +307,53 @@ elif KIND == 'portes':
             SFX.append(('pop', t + .1, -20)); opened += 1
     ob = B('open')
     if ob: js.append(f'tl.to("#co{nd}",{{opacity:0,duration:.35}},{ob[-1][1] - .2:.2f});')
+elif KIND == 'marches':  # chaque chute devient une marche : on remonte en se parlant autrement
+    SW, SH, SX0 = 160, 76, 360  # largeur et hauteur d'une marche, début de l'escalier (à droite du personnage)
+    js.append(f'tl.set("#fig",{{x:{X(215) - X(540)}}},0);')
+    h.append(fig_svg(POSES['stand']))
+    steps = []
+    for k, lab in enumerate(LABELS):
+        cx = SX0 + k * (SW - 10) + SW / 2; top = FLOOR - SH * (k + 1)
+        x = X(cx) - SW / 2; steps.append((X(cx), top))
+        h.append(f'<div class="lab step" id="st{k}" style="left:{x:.0f}px;top:{top}px;width:{SW}px;text-align:center;padding:0">{esc(lab)}</div>')
+    fl, sp = ('سقوط', 'درجة') if AR else ('CHUTE', 'MARCHE')
+    for k in range(1, n + 1): h.append(f'<div class="cnt" id="cf{k}"><b>{fl} ×{k}</b></div>')
+    for k in range(1, n + 1): h.append(f'<div class="cnt" id="cs{k}"><i>{sp} ×{k}</i></div>')
+    k = 0
+    for a, b, m in B('fall'):
+        step = max(.75, (b - a - .3) / max(1, m))
+        for j in range(m):
+            if k >= n: break
+            t = a + .15 + j * step
+            js.append(f'tl.fromTo("#st{k}",{{opacity:0,y:-330}},{{opacity:1,y:0,duration:.42,ease:"power3.in"}},{t:.2f});tl.fromTo("#st{k}",{{scaleY:.8}},{{scaleY:1,duration:.25,ease:"back.out(3)"}},{t + .42:.2f});')
+            js.append(f'tl.fromTo("#dust",{{opacity:.8,scale:.5,x:{steps[k][0] - X(540)}}},{{opacity:0,scale:1.3,duration:.8,ease:"power2.out"}},{t + .42:.2f});')
+            js.append(f'tl.set("#cf{k + 1}",{{opacity:1}},{t + .42:.2f});' + (f'tl.set("#cf{k}",{{opacity:0}},{t + .42:.2f});' if k else ''))
+            pose(t + .3, 'bend' if k % 2 == 0 else 'kneel', .35, 'power3.out')
+            SFX.append(('impact', t + .4, -15)); k += 1
+        pose(b - .6, 'kneel', .4)
+    for a, b, m in B('critic'):  # la voix intérieure qui juge : les marches rougissent et tremblent
+        js.append(f'tl.to(".step",{{borderColor:"#E5484D",color:"#FF8A8D",boxShadow:"0 0 26px rgba(229,72,77,.7)",duration:.5}},{a + .1:.2f});')
+        js.append(f'tl.to(".step",{{x:"+=5",duration:.07,yoyo:true,repeat:{max(3, int((b - a) / .14)) | 1}}},{a + .2:.2f});')
+        SFX.append(('heartbeat', a + .2, -17))
+    fb = B('fall')
+    if fb: js.append(f'tl.to("#cf{n}",{{opacity:0,duration:.3}},{(B("kind") or B("climb") or [(fb[-1][1],)])[0][0]:.2f});')
+    for a, b, m in B('kind'):  # se parler comme à un ami : il se relève, lumière douce
+        pose(a + .3, 'stand', .9, 'power2.out')
+        js.append(f'tl.to(".step",{{borderColor:"#F6F2EA",color:"#F6F2EA",boxShadow:"0 0 18px rgba(246,242,234,.35)",duration:.6}},{a + .2:.2f});tl.to("#light",{{opacity:.55,duration:1.2}},{a + .3:.2f});')
+        SFX.append(('breath', a + .3, -16))
+    k = 0
+    for a, b, m in B('climb'):
+        step = max(.65, (b - a - .3) / max(1, m))
+        for j in range(m):
+            if k >= n: break
+            t = a + .2 + j * step; sx, sy = steps[k]
+            js.append(f'tl.to("#fig",{{x:{sx - X(540):.0f},y:{sy - FLOOR:.0f},duration:.45,ease:"power2.out"}},{t:.2f});')
+            js.append(f'tl.to("#st{k}",{{borderColor:"#F2A541",color:"#FFE2B3",boxShadow:"0 0 28px rgba(242,165,65,.7)",duration:.3}},{t + .35:.2f});')
+            js.append(f'tl.set("#cs{k + 1}",{{opacity:1}},{t + .35:.2f});' + (f'tl.set("#cs{k}",{{opacity:0}},{t + .35:.2f});' if k else ''))
+            pose(t, 'reach', .2); pose(t + .25, 'stand', .2)
+            SFX.append(('pop', t + .35, -19)); k += 1
+    cb = B('climb')
+    if cb: js.append(f'tl.to("#cs{n}",{{opacity:0,duration:.3}},{cb[-1][1] - .2:.2f});')
 else:  # attaches
     AN = [(170, 1230), (910, 1230), (250, 760), (830, 760), (540, 1290), (540, 640)][:n]
     AN = [(X(x), y) for x, y in AN]
@@ -354,10 +401,14 @@ else:  # attaches
 rise = B('rise')
 if rise:
     a, b, m = rise[0]
-    if KIND != 'attaches': pose(a + .1, 'stand', .9, 'power2.out')
+    if KIND == 'marches': pose(a + .1, 'open', .8, 'power2.out')
+    elif KIND != 'attaches': pose(a + .1, 'stand', .9, 'power2.out')
     js.append(f'tl.to("#light",{{opacity:1,duration:1.6,ease:"power1.out"}},{a:.2f});tl.to("#beam",{{opacity:1,duration:1.2}},{a + .3:.2f});')
     if AMB == 'aube': js.append(f'tl.fromTo("#rays",{{opacity:0,scale:.6}},{{opacity:1,scale:1,duration:1.4,ease:"expo.out"}},{a + .2:.2f});tl.to("#sun",{{scale:1.5,duration:1.6}},{a + .2:.2f});')
     if KIND == 'portes': js.append(f'tl.to("#fig",{{x:0,duration:1}},{a:.2f});')
+    if KIND == 'marches':  # la lumière vient sur lui, en haut des marches
+        dx = steps[-1][0] - X(540)
+        js.append(f'tl.set(["#rays","#sun","#beam","#light"],{{x:{dx:.0f}}},{a:.2f});tl.set("#sun",{{y:{steps[-1][1] - FLOOR:.0f}}},{a:.2f});')
     SFX.append(('ding', a + .6, -16))
 h.append('</div>')  # fin #cam
 for i, b in enumerate(beats):
