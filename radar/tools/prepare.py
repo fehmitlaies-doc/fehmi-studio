@@ -22,13 +22,13 @@ if job.get('voices'):  # vidéo longue : un enregistrement par chapitre, mis bou
         parts.append(f'{D}/assets/v{k}.wav')
     open(f'{D}/assets/voices.txt', 'w').write(''.join(f"file '{os.path.abspath(x)}'\n" for x in parts))
     subprocess.run(['ffmpeg', '-v', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', f'{D}/assets/voices.txt', '-c:a', 'aac', '-b:a', '192k', f'{D}/assets/voice.m4a'], check=True)
-else:
+elif job.get('voice'):  # sans voix (format Métaphore « texte seul ») : rien à préparer
     get(job['voice'], f'{D}/assets/voice.src')
     subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', f'{D}/assets/voice.src', '-vn', '-ac', '1', '-ar', '48000',
                     '-af', AF, '-c:a', 'aac', '-b:a', '192k', f'{D}/assets/voice.m4a'], check=True)
 
 names = {f[:-4] for f in os.listdir(PACK) if f.endswith('.jpg')}
-for i, p in enumerate(job['plans']):
+for i, p in enumerate(job.get('plans') or []):
     if p.get('img_url'):
         get(p['img_url'], f'{D}/assets/n{i}.src')
         subprocess.run(['ffmpeg', '-v', 'error', '-y', '-i', f'{D}/assets/n{i}.src', '-q:v', '2', f'{D}/assets/n{i}.jpg'], check=True)
@@ -37,11 +37,11 @@ for i, p in enumerate(job['plans']):
         n = p.get('img') if p.get('img') in names else 'standing'
         shutil.copy(f'{PACK}/{n}.jpg', f'{D}/assets/{n}.jpg')
         p['_file'] = f'{n}.jpg'
-for f in ('Fraunces.ttf', 'Archivo.ttf', 'Cairo-ar.ttf', 'Cairo-la.ttf'):
+for f in ('Fraunces.ttf', 'Archivo.ttf', 'Cairo-ar.ttf', 'Cairo-la.ttf', 'Mono.ttf'):
     shutil.copy(f'{PACK}/{f}', f'{D}/assets/{f}')
 for f in os.listdir(f'{PACK}/music'):
     shutil.copy(f'{PACK}/music/{f}', f'{D}/assets/music_{f}')
 for f in os.listdir(f'{PACK}/sfx'):
     shutil.copy(f'{PACK}/sfx/{f}', f'{D}/assets/sfx_{f}')
 json.dump(job, open(f'{D}/job.json', 'w'), ensure_ascii=False)
-print('préparé :', len(job['plans']), 'plans, langue', job.get('lang'))
+print('préparé :', len(job.get('plans') or job.get('beats') or []), 'plans, langue', job.get('lang'))

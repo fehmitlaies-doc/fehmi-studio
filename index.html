@@ -174,7 +174,7 @@ h1{font-size:22px;margin:0}
 <script>
 const API = "https://hook.eu1.make.com/0jj57vomxlae4srwpwj6m74kdrkk24p2";
 // Mise à jour automatique : l'iPhone garde l'ancienne page en cache ; on compare avec la version en ligne et on recharge
-const BUILD = "2026-10-30.1";
+const BUILD = "2026-10-31.1";
 async function checkUpdate() {
   try {
     const t = await (await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" })).text();
@@ -463,11 +463,13 @@ async function translateVideo(r, btn) {
   const old = btn.textContent; btn.disabled = true; btn.textContent = "Claude adapte…";
   try {
     const base = { title: r.name, hook: r.hook, description: r.desc, hashtags: r.tags };
-    const data = r.fx?.style === "r7" ? { ...base, plans: r.fx.plans } : { ...base, script: r.script };
+    const data = isMeta(r) ? { ...base, plans: r.fx.plans.map(({ txt, say, hot }) => ({ txt, say, hot })), labels: r.fx.meta.labels, paper: r.fx.meta.paper, source_b: r.fx.meta.source.b, end: r.fx.meta.end, save: r.fx.meta.save, note: r.fx.meta.note }
+      : r.fx?.style === "r7" ? { ...base, plans: r.fx.plans } : { ...base, script: r.script };
     let j = null;
     for (let k = 0; k < 2 && !j; k++) {
       j = parseJSON((await api("gen", { prompt: trPrompt(r, data) })).text);
-      if (r.fx?.style === "r7" && cleanPlans(j?.plans).length < 4) j = null;
+      if (isMeta(r) && (!Array.isArray(j?.plans) || j.plans.length !== r.fx.plans.length)) j = null;
+      else if (!isMeta(r) && r.fx?.style === "r7" && cleanPlans(j?.plans).length < 4) j = null;
       if (j && !r.fx && String(j.script || "").length < 20) j = null;
     }
     if (!j) throw new Error("Claude n'a pas rendu une adaptation complète, réessaie dans une minute.");
@@ -476,7 +478,16 @@ async function translateVideo(r, btn) {
       Type: { select: { name: r.type || "Short" } }, Language: { select: { name: to } }, Channel: { select: { name: to === "عربي" ? "Dr Fehmi AR" : "Fehmi Tlaies FR" } },
       "Pipeline Stage": { select: { name: "Script" } }, "Promo app": { checkbox: !!r.promo }, ...(r.src ? { "Source URL": { url: r.src } } : {})
     };
-    if (r.fx?.style === "r7") {
+    if (isMeta(r)) {
+      const plans = r.fx.plans.map((p, k) => ({ act: p.act, txt: String(j.plans[k]?.txt ?? "").slice(0, 90), say: String(j.plans[k]?.say || "").slice(0, 240), hot: (j.plans[k]?.hot || []).map(String).slice(0, 2) }));
+      const meta = { ...r.fx.meta, labels: (Array.isArray(j.labels) ? j.labels : r.fx.meta.labels).map(x => String(x).slice(0, 22)).slice(0, 6), paper: String(j.paper || r.fx.meta.paper || "").slice(0, 20),
+        source: { b: String(j.source_b || r.fx.meta.source.b).slice(0, 160), i: r.fx.meta.source.i }, end: String(j.end || "").slice(0, 60), save: String(j.save || "").slice(0, 50), note: String(j.note || "").slice(0, 140) };
+      btn.textContent = "🩺 Relecture…";
+      const check = await checkPlans(plans, `version ${lab} d'une vidéo « métaphore » : ${j.title || r.name}`, meta);
+      props.Script = rt(plans.map(p => p.say).filter(Boolean).join("\n\n"));
+      props["Scènes"] = rt(JSON.stringify({ ...r.fx, meta, check, dialect: to === "عربي" ? arDia() : undefined, plans }));
+      props.Production = { select: { name: "Visuels IA" } };
+    } else if (r.fx?.style === "r7") {
       // textes adaptés, mais images, animations et sources gardées à l'identique
       const plans = cleanPlans(j.plans.map((p, k) => { const o = r.fx.plans[k] || {}; return { ...p, img: o.img || p.img, gfx: o.gfx || p.gfx, ...(o.img_url ? { img_url: o.img_url } : {}), ...(o.card ? { card: { b: p.card?.b || o.card.b, i: o.card.i } } : {}) }; }));
       btn.textContent = "🩺 Relecture…";
@@ -897,7 +908,8 @@ $("#bNew").onclick = () => {
     <div class="seg" id="gMode" style="width:100%"><button data-m="cam" style="flex:1">🎥 Face caméra</button><button data-m="fx" style="flex:1">🎞 Sans visage</button><button data-m="long" style="flex:1">📺 Vidéo longue</button></div>
     <div id="gLongBox" hidden><div class="small" style="margin-top:8px">YouTube 16:9, pensée pour le référencement : Claude (Opus) propose un plan en chapitres que tu valides, puis écrit le script. Tu enregistres ta voix chapitre par chapitre ; montage animé, chapitres horodatés et publication YouTube automatiques.</div>
       <label>Durée visée</label><select id="gMin"><option value="5">5 min</option><option value="6" selected>6 min</option><option value="8">8 min</option><option value="10">10 min (maximum conseillé)</option></select></div>
-    <div id="gStyleBox" hidden><div class="small" style="margin-top:8px">Style ambre : ta voix (enregistrée avec 🎙, ou ta voix clonée) · personnage du pack · animations · sous-titres incrustés · étiquette IA cochée.</div></div>
+    <div id="gStyleBox" hidden><label>Style</label><div class="seg" id="gFx" style="width:100%"><button data-s="r7" style="flex:1">Ambre</button><button data-s="meta" style="flex:1">✨ Métaphore</button></div>
+      <div class="small" id="gFxInfo" style="margin-top:8px"></div></div>
     <button class="ghost" id="gIdeas" style="width:100%;margin-top:12px">💡 Idées prêtes (Vague, Sursaut, santé mentale FR / AR)</button>
     <div id="gIdeaBox" hidden></div>
     <label>Sujet ou idée</label><textarea id="gTopic" rows="3" dir="auto" placeholder="ex. 3 mythes sur la nicotine">${esc(o.topic)}</textarea>
@@ -919,10 +931,15 @@ $("#bNew").onclick = () => {
   const setMode = m => { mode = m; document.querySelectorAll("#gMode button").forEach(b => b.classList.toggle("on", b.dataset.m === m)); $("#gStyleBox").hidden = m !== "fx"; $("#gLongBox").hidden = m !== "long"; $("#gSec").disabled = m !== "cam"; $("#gN").parentElement.hidden = $("#gSec").parentElement.hidden = m === "long"; };
   $("#gMode").onclick = e => { const m = e.target.closest("[data-m]")?.dataset.m; if (m) { setMode(m); if (!$("#gIdeaBox").hidden) { $("#gIdeaBox").hidden = true; toggleIdeas(); } } };
   setMode(mode);
+  let fxs = o.fxs || "r7";
+  const setFx = v => { fxs = v; document.querySelectorAll("#gFx button").forEach(b => b.classList.toggle("on", b.dataset.s === v));
+    $("#gFxInfo").textContent = v === "meta" ? "Personnage en traits lumineux sur fond noir, une métaphore visuelle (cartons, portes ou attaches) choisie par Claude, texte court, lumière dorée au retournement. Voix au choix : la tienne, ta voix IA clonée, ou texte seul." : "Style ambre : ta voix (enregistrée avec 🎙, ou ta voix clonée) · personnage du pack · animations · sous-titres incrustés · étiquette IA cochée."; };
+  $("#gFx").onclick = e => { const v = e.target.closest("[data-s]")?.dataset.s; if (v) setFx(v); };
+  setFx(fxs);
   $("#gCancel").onclick = () => $("#sheet").innerHTML = "";
   $("#gGo").onclick = async () => {
     const opt = { topic: $("#gTopic").value.trim(), lang: $("#gLang").value, n: +$("#gN").value, sec: +$("#gSec").value, promo: $("#gPromo").checked, app: $("#gApp").value, mode,
-      kw: $("#gKw").value.split(/[,،]/).map(k => k.trim()).filter(Boolean).slice(0, 6) };
+      kw: $("#gKw").value.split(/[,،]/).map(k => k.trim()).filter(Boolean).slice(0, 6), fxs };
     if (mode === "fx") opt.n = Math.min(opt.n, 3);
     if (!opt.topic) { toast("Écris un sujet."); return; }
     store.set("gen", opt);
@@ -931,7 +948,8 @@ $("#bNew").onclick = () => {
     if (mode === "fx") {
       try {
         const lang = opt.lang === "عربي" ? "ar" : "fr";
-        await pool(Array.from({ length: opt.n }, (_, k) => k), 3, k => createR7({ topic: opt.n > 1 ? `${opt.topic} (angle n° ${k + 1} sur ${opt.n}, différent des autres)` : opt.topic, lang, kw: opt.kw, promo: opt.promo, app: opt.app }));
+        const make = fxs === "meta" ? createMeta : createR7;
+        await pool(Array.from({ length: opt.n }, (_, k) => k), 3, k => make({ topic: opt.n > 1 ? `${opt.topic} (angle n° ${k + 1} sur ${opt.n}, différent des autres)` : opt.topic, lang, kw: opt.kw, promo: opt.promo, app: opt.app }));
         $("#sheet").innerHTML = ""; toast(`${opt.n} vidéo${opt.n > 1 ? "s" : ""} au style ambre : appuie sur 🎙 pour enregistrer ta voix.`, 5000); showNew(opt.lang);
       } catch (e) { btn.disabled = false; btn.textContent = "Écrire"; $("#gOut").innerHTML = `<div class="err">${esc(e.message)}</div>`; }
       return;
@@ -1365,21 +1383,26 @@ async function factCheck(items, ctx) {
   return { ok: false, fixes: [] };
 }
 // vérifie les plans d'une vidéo animée (voix + textes affichés qui portent une affirmation)
-async function checkPlans(plans, ctx) {
+async function checkPlans(plans, ctx, meta) {
   const items = [];
   plans.forEach((p, k) => {
-    items.push({ id: k + ".say", t: p.say, garder: [...(p.hot || []), p.word, p.stamp, p.steps?.at(-1)].filter(Boolean) });
+    if (p.say) items.push({ id: k + ".say", t: p.say, garder: [...(p.hot || []), p.word, p.stamp, p.steps?.at(-1)].filter(Boolean) });
+    if (p.txt) items.push({ id: k + ".txt", t: p.txt, garder: p.hot || [] });
     if (p.card?.b) items.push({ id: k + ".card", t: p.card.b });
     if (p.quote) items.push({ id: k + ".quote", t: p.quote });
     if (p.left?.t) items.push({ id: k + ".left", t: p.left.t }, { id: k + ".right", t: p.right.t });
     (p.items || []).forEach((x, n) => items.push({ id: `${k}.item${n}`, t: x.t }));
   });
+  if (meta) items.push({ id: "m.source", t: meta.source.b }, { id: "m.end", t: meta.end }, { id: "m.note", t: meta.note });
   // vidéo longue : relue par blocs d'environ 25 éléments en parallèle (un seul gros bloc peut dépasser le délai de Make)
   const parts = []; for (const it of items) { const last = parts[parts.length - 1]; if (last && (last.length < 25 || last[last.length - 1].id.split(".")[0] === it.id.split(".")[0])) last.push(it); else parts.push([it]); }
   const done = await pool(parts.map((x, k) => k), 3, k => factCheck(parts[k], ctx + (parts.length > 1 ? ` (partie ${k + 1}/${parts.length})` : "")));
   const res = { ok: done.every(d => d.ok), fixes: done.flatMap(d => d.fixes) };
   for (const f of res.fixes) {
-    const [k, field] = f.id.split("."), p = plans[+k]; if (!p) continue;
+    const [k, field] = f.id.split(".");
+    if (k === "m" && meta) { if (field === "source") meta.source.b = f.t.slice(0, 160); else meta[field] = f.t.slice(0, field === "note" ? 140 : 60); continue; }
+    const p = plans[+k]; if (!p) continue;
+    if (field === "txt") { p.txt = f.t.slice(0, 90); p.hot = (p.hot || []).filter(h => p.txt.includes(h)); continue; }
     if (field === "say") {
       p.say = f.t; const low = normW(f.t).join(" ");
       p.hot = (p.hot || []).filter(h => low.includes(normW(h).join(" ")));
@@ -1429,6 +1452,92 @@ async function createR7(o, tries = 2) {
     "Pipeline Stage": { select: { name: "Script" } }, "Promo app": { checkbox: !!o.promo }, ...(o.link ? { "Source URL": { url: o.link } } : {})
   }) });
   return res.id;
+}
+/* ---------- style « Métaphore » : personnage en traits lumineux, une métaphore visuelle (cartons, portes, attaches) ---------- */
+const META = {
+  cartons: { nom: "les cartons", pour: "charge mentale, stress, rumination du soir, surcharge, burn-out, culpabilité",
+    actes: "drop (les étiquettes tombent sur ses épaules, il plie puis tombe à genoux ; 1 ou 2 temps forts) → shake (facultatif : tout tremble) → paper (une feuille apparaît : la technique) → unload (chaque carton quitte sa tête et devient une ligne sur la feuille) → rise (il se relève dans la lumière) → card → end",
+    labels: "5 ou 6 poids concrets du quotidien, 18 caractères max (ex. MAILS, FACTURES, « ET SI J'OUBLIE ? »), le dernier est le plus lourd", paper: true },
+  portes: { nom: "les portes", pour: "anxiété, phobies, évitement, peur du regard, procrastination",
+    actes: "close (à chaque fuite une porte se ferme, tampon FERMÉE, il s'effondre ; 1 ou 2 temps forts) → shake (facultatif) → small (il va vers la plus petite porte et l'ouvre) → open (les autres s'ouvrent une à une, lumière dorée) → rise → card → end",
+    labels: "4 ou 5 situations évitées, 14 caractères max (ex. LE MÉTRO, LES SOIRÉES, L'AVION)" },
+  attaches: { nom: "les attaches", pour: "dépression, isolement, perte d'élan, rechute, déconnexion",
+    actes: "intro (il flotte, relié à des points d'ancrage) → cut (les attaches lâchent une à une ; 1 ou 2 temps forts) → drift (il dérive, s'éloigne) → relink (il les raccroche une à une) → rise → card → end",
+    labels: "4 ancrages concrets et validés, 14 caractères max (ex. SOMMEIL, MARCHE, UN AMI, LUMIÈRE DU JOUR)" }
+};
+const isMeta = r => !!r?.fx?.meta;
+function metaphorPrompt(o) {
+  const ar = o.lang === "ar";
+  return `Tu es le scénariste du Dr Fehmi, médecin psychiatre. Vidéo courte SANS VISAGE au style « Métaphore » (comme les chaînes Sabr Stories ou Un Instant de Foi) : fond noir, personnage en traits blancs lumineux, UNE métaphore visuelle qui se comprend sans le son, texte court en capitales, compteurs, lumière dorée au retournement, fin mémorable. Objectif : rétention maximale et vraie psychoéducation.
+Sujet : ${o.topic}
+Langue : ${ar ? arSay(o.dialect) : "français, tutoiement, phrases courtes"}.
+${o.promo ? appRules(o.app || "Vague") + "\n" : ""}${seoRules(o)}
+${EVIDENCE}
+MÉTAPHORES DISPONIBLES (choisis la plus juste pour le sujet) :
+${Object.entries(META).map(([k, m]) => `- "${k}" (${m.nom}) — pour : ${m.pour}. Déroulé des temps forts : ${m.actes}. Étiquettes : ${m.labels}.`).join("\n")}
+TECHNIQUES PROUVÉES (la vidéo en enseigne UNE, la carte "source" reprend ce que l'étude montre et sa source telle quelle) :
+${TECHNIQUES.map(t => `- [${t.id}] ${t.nom} — pour : ${t.pour}. Étapes : ${t.etapes}. Ce que l'étude montre : ${t.preuve}. Source : ${t.source}`).join("\n")}
+RÈGLES DE RÉTENTION :
+- 7 à 9 temps forts ("beats") dans l'ordre du déroulé de la métaphore choisie ; 30 à 45 secondes au total.
+- Beat 1 = l'accroche, lisible en 1 seconde : une vérité qui touche (« TU PENSES POUVOIR TOUT PORTER. »), jamais de bonjour.
+- "txt" : la ligne affichée, 3 à 8 mots, ${ar ? "en arabe simplifié" : "EN MAJUSCULES"}, percutante ; "hot" : 1 ou 2 mots EXACTS de "txt" à colorer en ambre.
+- "say" : la phrase dite (si voix), 6 à 20 mots, naturelle, qui reprend l'idée de "txt" sans la lire mot pour mot ; 70 à 100 mots AU TOTAL.
+- Les beats "card" et "end" ont "txt": "" ; leur "say" introduit la preuve puis dit la phrase de fin.
+- "end" : phrase à retenir, 3 à 7 mots, qui donne envie d'enregistrer ; "save" : « ${ar ? "احفظها للأيام الصعبة." : "À GARDER POUR LES JOURS LOURDS."} » ou une variante adaptée ; "note" : quand consulter un professionnel, 1 phrase courte.
+- La dernière image doit pouvoir s'enchaîner avec la première (la vidéo boucle).
+${ar ? "- Tous les textes affichés en arabe simplifié, étiquettes comprises ; aucun mot français à l'écran.\n" : ""}Réponds UNIQUEMENT en JSON : {"kind": "cartons|portes|attaches", "technique": "id", "title": "titre YouTube 60 caractères max", "hook": "texte écran 3 à 6 mots", "description": "2-3 phrases + question, sans hashtags", "hashtags": "5 hashtags", "music": "calme|espoir|tension|mystere|nuit|oriental", "labels": [""], "paper": "${ar ? "غدا" : "DEMAIN"} (titre de la feuille, cartons seulement)", "beats": [{"act": "", "txt": "", "say": "", "hot": [""]}], "source": {"b": "ce que l'étude montre, 20 mots max", "i": "source exacte, en capitales"}, "end": "", "save": "", "note": ""}`;
+}
+function cleanBeats(arr, kind) {
+  const ok = new Set(["intro", "drop", "shake", "paper", "unload", "close", "small", "open", "cut", "drift", "relink", "rise", "card", "end"]);
+  return (arr || []).filter(b => b && ok.has(b.act)).slice(0, 12).map(b => ({ act: b.act, txt: String(b.txt || "").slice(0, 90), say: String(b.say || "").trim().slice(0, 240), hot: (b.hot || []).map(String).slice(0, 2) }));
+}
+async function createMeta(o, tries = 2) {
+  const j = parseJSON((await api("gen", { prompt: metaphorPrompt(o) })).text);
+  const kind = META[j?.kind] ? j.kind : "cartons", beats = cleanBeats(j?.beats, kind);
+  if (beats.length < 5 || !Array.isArray(j?.labels) || !j.labels.length) {
+    if (tries > 1) { toast("Réponse de Claude incomplète, nouvel essai…", 5000); return createMeta(o, tries - 1); }
+    throw new Error("Claude n'a pas rendu un script complet deux fois de suite. Réessaie dans une minute.");
+  }
+  const meta = { kind, labels: j.labels.map(x => String(x).slice(0, 22)).slice(0, 6), paper: String(j.paper || "").slice(0, 20),
+    source: { b: String(j.source?.b || "").slice(0, 160), i: String(j.source?.i || "").slice(0, 90) }, end: String(j.end || "").slice(0, 60), save: String(j.save || "").slice(0, 50), note: String(j.note || "").slice(0, 140) };
+  const check = await checkPlans(beats, `vidéo courte « métaphore » en ${o.lang === "ar" ? "arabe" : "français"}, sujet : ${o.topic}`, meta);
+  const lang = o.lang === "ar" ? "عربي" : "Francais";
+  const res = await api("create", { props: JSON.stringify({
+    Name: { title: [{ text: { content: String(j.title || o.topic).slice(0, 200) } }] },
+    Script: rt(beats.map(b => b.say).filter(Boolean).join("\n\n")), Description: rt(j.description), Hashtags: rt(j.hashtags), "Texte écran": rt(j.hook || beats[0].txt),
+    "Scènes": rt(JSON.stringify({ style: "r7", meta, music: MUSICS[j.music] ? j.music : "calme", technique: String(j.technique || ""), ...(o.lang === "ar" ? { dialect: o.dialect || arDia() } : {}), check, plans: beats })),
+    Production: { select: { name: "Visuels IA" } }, Type: { select: { name: "Short" } }, Language: { select: { name: lang } }, Channel: { select: { name: lang === "عربي" ? "Dr Fehmi AR" : "Fehmi Tlaies FR" } },
+    "Pipeline Stage": { select: { name: "Script" } }, "Promo app": { checkbox: !!o.promo }
+  }) });
+  return res.id;
+}
+// voix d'une vidéo « Métaphore » : la tienne, la voix clonée, ou texte seul (musique et sons)
+function openMetaVoice(r) {
+  const fx = r.fx, says = fx.plans.map(p => p.say).filter(Boolean), chars = says.join(" ").length;
+  $("#sheet").innerHTML = `<div class="sheet"><div>
+    <h2 style="margin:0 0 4px" dir="auto">${esc(r.name)}</h2>
+    <div class="small">Métaphore « ${esc(META[fx.meta.kind]?.nom || fx.meta.kind)} » · ${fx.plans.length} temps forts. Choisis la voix : avec voix, les sous-titres s'allument mot à mot.</div>
+    <div class="row" style="margin-top:10px"><div><label>Musique</label><select id="vMusic">${Object.entries(MUSICS).map(([k, v]) => `<option value="${k}" ${(fx.music || "calme") === k ? "selected" : ""}>${esc(v)}</option>`).join("")}<option value="none" ${fx.music === "none" ? "selected" : ""}>sans musique</option></select></div>
+      <div><label>Rythme de la voix</label><select id="vSpeed">${[[1, "naturel"], [1.1, "+10 % (recommandé)"], [1.2, "+20 %"]].map(([v, l]) => `<option value="${v}" ${(fx.speed || 1.1) === v ? "selected" : ""}>${l}</option>`).join("")}</select></div></div>
+    <label>Ambiance</label><select id="vAmb"><option value="aube">Aube : ciel de crépuscule, montagnes, rayons dorés (plus vivant)</option><option value="nuit" ${fx.ambiance === "nuit" ? "selected" : ""}>Nuit : fond noir, sobre et cinématographique</option></select>
+    <div style="margin:12px 0" dir="auto">${fx.plans.map((p, k) => `<div class="sayplan"><small>${k + 1} · ${esc(p.act)}${p.txt ? " · " + esc(p.txt) : ""}</small>${esc(p.say)}</div>`).join("")}</div>
+    <button class="pri" id="vRec" style="width:100%">🎙 Ma voix (prompteur)</button>
+    <div class="row" style="margin-top:10px"><button class="ghost" id="vClone">🤖 Voix IA clonée (≈ ${money(chars * PRICE.tts)})</button><button class="ghost" id="vNone">📝 Texte seul</button></div>
+    <button class="ghost" id="vClose" style="width:100%;margin-top:10px">Fermer</button>
+  </div></div>`;
+  const keep = () => { fx.music = $("#vMusic").value; fx.speed = +$("#vSpeed").value; fx.ambiance = $("#vAmb").value; api("update", { id: r.id, props: JSON.stringify({ "Scènes": rt(JSON.stringify(fx)) }) }).catch(() => {}); };
+  $("#vClose").onclick = () => $("#sheet").innerHTML = "";
+  $("#vRec").onclick = () => { keep(); $("#sheet").innerHTML = ""; startShoot([r.id], store.get("plan", { mode: "now", time: "18:00" }), true); };
+  $("#vNone").onclick = () => { keep(); $("#sheet").innerHTML = ""; renderR7(r, { none: true }); };
+  $("#vClone").onclick = async () => {
+    keep(); const b = $("#vClone"); b.disabled = true; b.textContent = "Voix IA…";
+    try {
+      const text = says.join(" <#0.5#> ");
+      const d = await falRun("fal-ai/minimax/speech-02-hd", { text, voice_setting: { voice_id: VOICE_ID, speed: 1, vol: 1, pitch: 0, emotion: "neutral" }, language_boost: isAr(r) ? "Arabic" : "French", output_format: "url" });
+      if (!d.audio?.url) throw new Error("voix non générée");
+      $("#sheet").innerHTML = ""; renderR7(r, { url: d.audio.url, cost: text.length * PRICE.tts });
+    } catch (e) { b.disabled = false; b.textContent = "🤖 Voix IA clonée"; toast(e.message); }
+  };
 }
 /* ---------- vidéos longues YouTube (16:9) : plan validé par Fehmi, puis chapitres écrits par Claude ---------- */
 const LONG_WPM = 110;  // mots par minute une fois montée (voix posée, accélérée de 10 %)
@@ -1858,7 +1967,7 @@ function r7Card(r) {
   const job = rx.get(r.id), wait = job && !r.link;
   return `<div class="card"><span style="width:24px;flex:none;text-align:center" aria-hidden="true">🎙</span>
     <div class="b"><div class="t" dir="auto" data-edit="${r.id}">${esc(r.name)} <span class="small">✎</span></div>
-      <div class="meta"><span class="pill">${isAr(r) ? "AR" : "FR"}</span><span class="pill">${r.fx.plans.length} plans</span><span class="pill">ambre</span>${checkPill(r.fx.check)}
+      <div class="meta"><span class="pill">${isAr(r) ? "AR" : "FR"}</span><span class="pill">${r.fx.plans.length} ${isMeta(r) ? "temps forts" : "plans"}</span><span class="pill">${isMeta(r) ? "✨ " + esc(META[r.fx.meta.kind]?.nom || "métaphore") : "ambre"}</span>${checkPill(r.fx.check)}
       ${wait ? `<span class="pill warn">⏳ montage en cours</span>` : r.link ? `<span class="pill ok">vidéo prête</span>` : `<span class="pill warn">voix à enregistrer</span>`}${r.cost != null ? `<span class="pill">💲 ${money(r.cost)}</span>` : ""}</div></div>
     ${wait ? `<button class="go" data-rwait="${r.id}" aria-label="Voir l'avancement du montage">⏳</button>` : `<button class="go" data-voice="${r.id}" aria-label="${r.link ? "Refaire" : "Enregistrer"} la voix">🎙</button>`}</div>
     ${r.link ? `<div class="vbox" data-v="${esc(r.link)}" style="margin:-4px 0 12px"><div class="row"><button class="ghost vplay">▶ Regarder</button><button class="pri" data-pub="${r.id}">🚀 Publier</button></div></div><div class="row" style="margin:-4px 0 12px">${trButton(r)}</div>` : ""}`;
@@ -1906,6 +2015,7 @@ $("#radar").onclick = async e => {
 /* ---------- voix : la tienne (prompteur voix seule) ou la voix clonée ---------- */
 function openVoice(r) {
   if (!r) return;
+  if (isMeta(r)) return openMetaVoice(r);
   const chars = r.fx.plans.reduce((a, p) => a + p.say.length, 0);
   $("#sheet").innerHTML = `<div class="sheet"><div>
     <h2 style="margin:0 0 4px" dir="auto">${esc(r.name)}</h2>
@@ -1963,8 +2073,18 @@ async function renderR7(r, src) {
   fxSteps(steps);
   try {
     let cost = src.cost || 0;
-    const voice = src.url || await falUpload(src.blob, "voix." + (/mp4|m4a|aac/.test(src.mime || src.blob.type) ? "m4a" : "webm"));
-    set(0, "ok", src.url ? "Voix clonée" : "Ta voix"); set(1, "run");
+    const voice = src.none ? "" : src.url || await falUpload(src.blob, "voix." + (/mp4|m4a|aac/.test(src.mime || src.blob.type) ? "m4a" : "webm"));
+    set(0, "ok", src.none ? "Texte seul (sans voix)" : src.url ? "Voix clonée" : "Ta voix"); set(1, "run");
+    if (isMeta(r)) {  // métaphore : tout est dessiné au montage, pas d'images à créer
+      set(1, "ok", "Animation dessinée (aucune image à créer)"); set(2, "run");
+      const t = String(Math.floor(Date.now() / 1000)), m = r.fx.meta;
+      const job = { format: "metaphor", kind: m.kind, ambiance: r.fx.ambiance || "aube", lang: isAr(r) ? "ar" : "fr", music: r.fx.music || "calme", sfx: true, speed: r.fx.speed || 1.1, ...(voice ? { voice } : {}),
+        beats: r.fx.plans, labels: m.labels, paper: m.paper, source: m.source, end: m.end, save: m.save, note: m.note, plans: [] };
+      const res = await api("render", { id: r.id, t, ref: REF, job: b64(JSON.stringify(job)) });
+      if (!res.ok) throw new Error("GitHub a refusé le montage (" + (res.status || "?") + ")");
+      rx.set(r.id, { file: `${r.id}-${t}.mp4`, name: `${r.id}-${t}`, cost: +cost.toFixed(2), at: Date.now() });
+      render(); watchRender(r, true); return;
+    }
     const plans = r.fx.plans;
     let changed = false;
     for (const p of plans.filter(p => p.newimg && !p.img_url)) {
