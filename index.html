@@ -174,7 +174,7 @@ h1{font-size:22px;margin:0}
 <script>
 const API = "https://hook.eu1.make.com/0jj57vomxlae4srwpwj6m74kdrkk24p2";
 // Mise à jour automatique : l'iPhone garde l'ancienne page en cache ; on compare avec la version en ligne et on recharge
-const BUILD = "2026-11-02.1";
+const BUILD = "2026-11-02.2";
 async function checkUpdate() {
   try {
     const t = await (await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" })).text();
@@ -893,6 +893,8 @@ async function toggleIdeas() {
       $("#gTopic").value = i.t;
       $("#gKw").value = [...new Set([i.k, ...c.kw].filter(Boolean))].slice(0, 5).join(", ");
       if (c.app) { $("#gPromo").checked = true; $("#gApp").value = c.app; }
+      if ($("#gPro")) $("#gPro").value = c.pro ? "1" : "";
+      if (c.pro) { $("#gLang").value = "Francais"; $("#gLang").dispatchEvent(new Event("change")); document.querySelector('#gMode [data-m="long"]')?.click(); }
       box.hidden = true; toast("Idée choisie : ajuste si besoin, puis « Écrire ».");
     });
   };
@@ -907,6 +909,7 @@ $("#bNew").onclick = () => {
     <label>Format</label>
     <div class="seg" id="gMode" style="width:100%"><button data-m="cam" style="flex:1">🎥 Face caméra</button><button data-m="fx" style="flex:1">🎞 Sans visage</button><button data-m="long" style="flex:1">📺 Vidéo longue</button></div>
     <div id="gLongBox" hidden><div class="small" style="margin-top:8px">YouTube 16:9, pensée pour le référencement : Claude (Opus) propose un plan en chapitres que tu valides, puis écrit le script. Tu enregistres ta voix chapitre par chapitre ; montage animé, chapitres horodatés et publication YouTube automatiques.</div>
+      <label>Public et chaîne</label><select id="gPro"><option value="">Grand public : santé mentale (chaîne Fehmi Tlaies FR)</option><option value="1">Thérapeutes : IA et technologie (chaîne pro Fehmi Tlaies)</option></select>
       <label>Durée visée</label><select id="gMin"><option value="5">5 min</option><option value="6" selected>6 min</option><option value="8">8 min</option><option value="10">10 min (maximum conseillé)</option></select></div>
     <div id="gStyleBox" hidden><label>Style</label><div class="seg" id="gFx" style="width:100%"><button data-s="r7" style="flex:1">Ambre</button><button data-s="meta" style="flex:1">✨ Métaphore</button></div>
       <div class="small" id="gFxInfo" style="margin-top:8px"></div></div>
@@ -943,7 +946,7 @@ $("#bNew").onclick = () => {
     if (mode === "fx") opt.n = Math.min(opt.n, 3);
     if (!opt.topic) { toast("Écris un sujet."); return; }
     store.set("gen", opt);
-    if (mode === "long") { longOutline({ ...opt, lang: opt.lang === "عربي" ? "ar" : "fr", min: +$("#gMin").value }); return; }
+    if (mode === "long") { const pro = $("#gPro").value === "1"; longOutline({ ...opt, pro, lang: pro ? "fr" : opt.lang === "عربي" ? "ar" : "fr", min: +$("#gMin").value }); return; }
     const btn = $("#gGo"); btn.disabled = true; btn.textContent = "Claude écrit…";
     if (mode === "fx") {
       try {
@@ -1356,6 +1359,16 @@ const EVIDENCE = `EXACTITUDE (règle absolue, le Dr Fehmi est médecin psychiatr
 - Jamais de conseil dangereux : arrêt ou changement de traitement sans médecin, sevrage d'alcool ou de benzodiazépines seul, jeûne extrême. Sujet suicide ou automutilation : aucune méthode, toujours une ressource d'aide (en France le 3114 ; urgences 15 ou 112 ; ailleurs les urgences ou un professionnel).
 - Clair pour le grand public : mots simples, exemples concrets, une idée à la fois.`;
 function checkPrompt(items, ctx) {
+  if (/^pro:/.test(ctx)) return `Tu es médecin psychiatre, expert de l'IA en santé et de la réglementation (secret professionnel, RGPD, HDS, AI Act). Tu relis le texte d'une vidéo du Dr Fehmi destinée aux thérapeutes (${ctx.slice(4)}) AVANT qu'il l'enregistre. Il exige ZÉRO erreur et zéro invention.
+Vérifie CHAQUE affirmation et corrige seulement le FOND, jamais le style :
+- chiffre, statistique, étude, prix, date ou fonctionnalité d'outil incertains ou invérifiables ; nom d'outil présenté comme « le meilleur » ;
+- affirmation juridique ou réglementaire fausse, trop catégorique ou présentée comme un conseil juridique définitif ;
+- encouragement, même implicite, à saisir des données de patients identifiables dans un outil non conforme ;
+- promesse excessive (gain de temps chiffré, « l'IA remplace… ») ; oubli des limites (erreurs, biais, relecture par le clinicien).
+Une correction garde la même langue, le même ton, une longueur proche. Ne touche pas aux éléments justes.
+Éléments (JSON) :
+${JSON.stringify(items)}
+Réponds UNIQUEMENT en JSON : {"fixes": [{"id": "id de l'élément", "t": "texte corrigé", "why": "erreur corrigée, en 12 mots max"}]} — "fixes": [] si tout est exact.`;
   return `Tu es médecin psychiatre et relecteur scientifique. Tu relis le texte d'une vidéo du Dr Fehmi (${ctx}) AVANT qu'il l'enregistre. Il exige ZÉRO erreur et zéro invention.
 Vérifie CHAQUE affirmation de chaque élément. Corrige seulement le FOND, jamais le style :
 - fait inventé, non vérifiable ou contraire au consensus actuel (DSM-5-TR, CIM-11, HAS, NICE, APA, OMS, méta-analyses, Cochrane) ;
@@ -1545,11 +1558,33 @@ function openMetaVoice(r) {
     } catch (e) { b.disabled = false; b.textContent = "🤖 Voix IA clonée"; toast(e.message); }
   };
 }
+/* ---------- chaîne pro « IA & technologie pour thérapeutes » (vidéos longues + Shorts, YouTube Fehmi Tlaies) ---------- */
+const PRO_CH = "Fehmi Tlaies (IA thérapeutes)";
+const isPro = r => r?.fx?.pro === true;
+const chanOf = (lang, pro) => pro ? PRO_CH : (lang === "عربي" || lang === "ar") ? "Dr Fehmi AR" : "Fehmi Tlaies FR";
+const PRO_RULES = `EXACTITUDE (public professionnel : psychologues, psychothérapeutes, psychiatres, médecins ; zéro invention) :
+- Jamais de chiffre, statistique, étude, prix, date de sortie ou fonctionnalité précise d'un outil qui ne soit pas certaine : les outils changent vite, présente les fonctions de façon générale et invite à vérifier les conditions actuelles.
+- Confidentialité d'abord : ne jamais encourager à saisir des données de patients identifiables dans un outil grand public ; rappeler le secret professionnel, le RGPD, l'hébergement de données de santé certifié (HDS) en France, et de vérifier les recommandations de la CNIL et de son ordre ou organisme professionnel. Pas de conseil juridique définitif.
+- L'IA ne remplace ni le jugement clinique, ni la relation thérapeutique, ni la supervision ; signaler ses limites (erreurs et « hallucinations », biais, sécurité) et la nécessité de tout relire.
+- Pas de promesse de gain de temps ou d'argent chiffrée ; pas de nom d'outil présenté comme « le meilleur ».
+- Concret et utile : méthode, exemple de consigne (prompt) sans donnée réelle, checklist, cas fictif clairement présenté comme fictif.`;
 /* ---------- vidéos longues YouTube (16:9) : plan validé par Fehmi, puis chapitres écrits par Claude ---------- */
 const LONG_WPM = 110;  // mots par minute une fois montée (voix posée, accélérée de 10 %)
-const longLang = o => o.lang === "ar" ? arSay(o.dialect) : "français parlé, tutoiement, phrases courtes";
+const longLang = o => o.lang === "ar" ? arSay(o.dialect) : o.pro ? "français parlé, vouvoiement (public de thérapeutes), phrases courtes, vocabulaire clinique juste sans jargon technique inutile" : "français parlé, tutoiement, phrases courtes";
 function longOutlinePrompt(o) {
   const words = Math.round(o.min * LONG_WPM);
+  if (o.pro) return `Tu es le scénariste YouTube du Dr Fehmi, médecin psychiatre qui aide les thérapeutes (psychologues, psychothérapeutes, psychiatres, médecins) à utiliser l'intelligence artificielle et la technologie dans leur pratique, de façon utile, éthique et conforme. Vidéo LONGUE (${o.min} minutes, 16:9) pour sa chaîne professionnelle, pensée pour le RÉFÉRENCEMENT YouTube et Google : sa voix + motion design ambre avec un personnage unique.
+Sujet : ${o.topic}
+Langue : ${longLang(o)}.
+${seoRules(o)}
+${PRO_RULES}
+RÈGLES SPÉCIFIQUES :
+- Intention de recherche : le thérapeute a tapé une question (« comment utiliser ChatGPT en tant que psychologue », « IA et secret professionnel »…). L'intro (chapitre 0, 45 à 70 mots, moins de 30 secondes) y répond en une phrase dès les 10 premières secondes, prononce le mot-clé principal, annonce une promesse concrète et ouvre une boucle (ce qu'on révèle à la fin, ex. « l'erreur qui peut vous coûter cher en confidentialité »).
+- 4 à 6 chapitres, intro et conclusion comprises ; chaque chapitre intermédiaire répond à UNE question précise de longue traîne, son titre contient cette expression (50 caractères max).
+- Au moins un chapitre donne une méthode applicable dès demain (exemple de consigne sans donnée réelle, checklist, flux de travail) et un chapitre traite des risques et de la conformité.
+- Conclusion (50 à 80 mots) : referme la boucle, récapitulatif en 3 points, rappel que l'IA reste un outil sous la responsabilité du clinicien, invitation à s'abonner et à regarder une autre vidéo de la chaîne.
+- Total : environ ${words} mots (répartis dans "words").
+Réponds UNIQUEMENT en JSON : {"title": "titre YouTube, mot-clé en premier, 70 caractères max", "description": "4 à 6 phrases : la 1re contient le mot-clé principal ; résumé de ce qu'on apprend ; sans hashtags", "hashtags": "3 à 5 hashtags", "tags": "12 à 15 tags YouTube séparés par des virgules", "technique": "", "thumb": "texte de la MINIATURE : 2 à 4 mots percutants et honnêtes qui complètent le titre", "hl": "le mot de la miniature à colorer en ambre", "pose": "expression du Dr Fehmi sur la miniature : ${Object.entries(POSES).map(([k, v]) => k + " (" + v + ")").join(", ")}", "chapters": [{"t": "titre du chapitre", "q": "question exacte tapée par les thérapeutes", "points": ["idée 1", "idée 2", "idée 3"], "words": 150}]}`;
   return `Tu es le scénariste YouTube du Dr Fehmi, médecin psychiatre (santé mentale, psychologie du quotidien, addictions). Vidéo LONGUE (${o.min} minutes, 16:9) pensée pour le RÉFÉRENCEMENT YouTube et Google (recherche, pas viralité) : sa voix + motion design ambre avec un personnage unique.
 Sujet : ${o.topic}
 Langue : ${longLang(o)}.
@@ -1569,7 +1604,11 @@ Réponds UNIQUEMENT en JSON : {"title": "titre YouTube, mot-clé en premier, 70 
 }
 const LONG_GFX = `"gfx" (au plus 1 plan sur 2, varie, jamais deux fois le même d'affilée) : "card" ("card": {"b": "ce que l'étude montre en 10 mots max", "i": "la source exacte"}) · "check" ("items": [{"t": "3-6 mots", "ok": true|false}] 2 ou 3) · "split" ("left": {"label": "MYTHE" ou "AVANT", "t": "4-8 mots"}, "right": {"label": "VÉRITÉ" ou "APRÈS", "t": "4-8 mots"}) · "quote" ("quote": phrase à retenir, 14 mots max) · "count" ("count": nombre d'étapes) · "breath" ("steps": 2-3 étiquettes en MAJUSCULES dont le dernier mot est prononcé) · "bigword" ("word": UN mot prononcé dans le plan) · "stamp" ("stamp": "FAUX", "VRAI" ou "MYTHE", prononcé dans le plan) · "timer" ("seconds": 3 à 10) · "ecg" · "pulse" · "ring" (intro seulement) · "cta" ("cta": mot à écrire en commentaire, conclusion seulement) · "none".`;
 function longChapterPrompt(o, out, k) {
-  const ch = out.chapters[k], tech = TECHNIQUES.find(t => t.id === out.technique);
+  const ch = out.chapters[k], tech = o.pro ? null : TECHNIQUES.find(t => t.id === out.technique);
+  const txt = longChapterText(o, out, k, ch, tech);
+  return o.pro ? txt.replace("du Dr Fehmi, médecin psychiatre :", "du Dr Fehmi, médecin psychiatre, pour sa chaîne PROFESSIONNELLE destinée aux thérapeutes (IA et technologie dans la pratique clinique) :").replace(EVIDENCE, PRO_RULES) : txt;
+}
+function longChapterText(o, out, k, ch, tech) {
   return `Tu écris le chapitre ${k + 1}/${out.chapters.length} d'une vidéo YouTube longue du Dr Fehmi, médecin psychiatre : sa voix + motion design ambre (16:9) avec un personnage unique.
 Titre de la vidéo : ${out.title}
 Plan complet : ${out.chapters.map((c, i) => `${i + 1}. ${c.t}`).join(" · ")}
@@ -1642,16 +1681,16 @@ async function longWrite(opt, out) {
     });
     const plans = res.flatMap((ps, k) => ps.map(p => ({ ...p, ch: k })));
     b.textContent = "🩺 Relecture scientifique…";
-    const check = await checkPlans(plans, `vidéo YouTube longue en ${opt.lang === "ar" ? "arabe" : "français"} : ${out.title}`);
+    const check = await checkPlans(plans, `${opt.pro ? "pro:" : ""}vidéo YouTube longue en ${opt.lang === "ar" ? "arabe" : "français"} : ${out.title}`);
     const lang = opt.lang === "ar" ? "عربي" : "Francais";
-    const fx = { style: "long", lang: opt.lang, ...(opt.lang === "ar" ? { dialect: arDia() } : {}), kw: opt.kw || [], technique: String(out.technique || ""), music: "calme", speed: 1.1,
+    const fx = { style: "long", ...(opt.pro ? { pro: true } : {}), lang: opt.lang, ...(opt.lang === "ar" ? { dialect: arDia() } : {}), kw: opt.kw || [], technique: String(out.technique || ""), music: "calme", speed: 1.1,
       chapters: out.chapters.map(c => String(c.t || "").slice(0, 90)), tags: String(out.tags || "").slice(0, 500), desc0: String(out.description || "").slice(0, 1800), thumb: String(out.thumb || "").slice(0, 40), hl: String(out.hl || "").slice(0, 20), pose: POSES[out.pose] ? out.pose : "point", check, plans, voices: [] };
     const newRes = await api("create", { props: JSON.stringify({
       Name: { title: [{ text: { content: String(out.title || opt.topic).slice(0, 100) } }] },
       Script: rt(fx.chapters.map((c, k) => `## ${k ? k + ". " : ""}${c}\n\n` + plans.filter(p => p.ch === k).map(p => p.say).join("\n\n")).join("\n\n")),
       Description: rt(fx.desc0), Hashtags: rt(out.hashtags), "Texte écran": rt(fx.chapters[0]), "Scènes": rt(JSON.stringify(fx)),
       Production: { select: { name: "Visuels IA" } }, Type: { select: { name: "Video Long" } }, Language: { select: { name: lang } },
-      Channel: { select: { name: lang === "عربي" ? "Dr Fehmi AR" : "Fehmi Tlaies FR" } }, "Pipeline Stage": { select: { name: "Script" } }, "Promo app": { checkbox: !!opt.promo }
+      Channel: { select: { name: chanOf(lang, opt.pro) } }, "Pipeline Stage": { select: { name: "Script" } }, "Promo app": { checkbox: !!opt.promo }
     }) });
     $("#sheet").innerHTML = ""; toast("Vidéo longue prête à enregistrer : touche 📺 sur sa carte.", 5000); showNew(lang, newRes?.id);
   } catch (e) { b.disabled = false; $("#oAgain").disabled = false; b.textContent = "✓ Écrire le script"; toast(e.message, 6000); }
@@ -1741,7 +1780,7 @@ async function longFinish(r, run) {
   const desc = [fx.desc0 || r.desc,
     ch.length >= 3 ? (ar ? "الفصول :\n" : "Chapitres :\n") + ch.map(c => `${c.t} ${c.title}`).join("\n") : "",
     tech ? `${ar ? "المصدر" : "Source"} : ${tech.source} — PubMed ${tech.pmid}` : "",
-    ar ? "هذا الفيديو للتوعية فقط ولا يعوّض استشارة طبيب أو أخصائي نفسي." : "Cette vidéo informe : elle ne remplace pas une consultation médicale ou psychologique."].filter(Boolean).join("\n\n");
+    isPro(r) ? "Cette vidéo informe les professionnels : elle ne remplace ni un avis juridique ni les recommandations de votre ordre ou organisme professionnel. N'utilisez jamais de données de patients identifiables dans un outil non conforme." : ar ? "هذا الفيديو للتوعية فقط ولا يعوّض استشارة طبيب أو أخصائي نفسي." : "Cette vidéo informe : elle ne remplace pas une consultation médicale ou psychologique."].filter(Boolean).join("\n\n");
   fx.chaptersAt = ch; r.desc = desc;
   return { Description: rt(desc), "Scènes": rt(JSON.stringify(fx)) };
 }
@@ -1828,7 +1867,7 @@ function publishLong(r) {
   const d0 = new Date(); d0.setDate(d0.getDate() + 1); d0.setHours(18, 0, 0, 0);
   $("#sheet").innerHTML = `<div class="sheet"><div>
     <h2 style="margin:0 0 4px" dir="auto">${esc(r.name)}</h2>
-    <div class="small">Publiée sur YouTube seulement (chaîne ${isAr(r) ? "Dr Fehmi AR" : "Fehmi Tlaies FR"}), avec les chapitres dans la description. Titre, description et date restent modifiables dans 📊 Suivi.</div>
+    <div class="small">Publiée sur YouTube seulement (chaîne ${isPro(r) ? "Fehmi Tlaies, IA pour thérapeutes" : isAr(r) ? "Dr Fehmi AR" : "Fehmi Tlaies FR"}), avec les chapitres dans la description. Titre, description et date restent modifiables dans 📊 Suivi.</div>
     <label>Miniature</label><div id="tPrev" style="aspect-ratio:16/9;border-radius:12px;overflow:hidden;background:#17121C"></div>
     <div class="row"><div style="flex:2"><label>Texte (2 à 4 mots)</label><input id="tText" dir="auto" maxlength="40" value="${esc(thumbText(r))}"></div>
       <div><label>Mot en ambre</label><input id="tHl" dir="auto" maxlength="20" value="${esc(r.fx.hl || "")}"></div></div>
@@ -1946,11 +1985,11 @@ async function makeClips(i, btn) {
       btn.textContent = `Short ${n + 1}/${clips.length}…`;
       d = new Date(d); d.setDate(d.getDate() + (n ? 2 : 1)); d.setHours(18, 0, 0, 0);
       const up = await api("pfmup"); if (up.status >= 300 || !up.upload_url) throw new Error("stockage Post for Me indisponible");
-      const sc = { style: "r7", clipOf: r.id, music: fx.music || "calme", speed: 1.2, plans: c.plans };
+      const sc = { style: "r7", clipOf: r.id, ...(isPro(r) ? { pro: true } : {}), music: fx.music || "calme", speed: 1.2, plans: c.plans };
       const res = await api("create", { props: JSON.stringify({
         Name: { title: [{ text: { content: String(c.title || r.name).slice(0, 100) } }] }, Script: rt(c.plans.map(p => p.say).join("\n\n")),
         Description: rt(`${c.description || ""}\n\n▶ ${ar ? "الفيديو الكامل" : "Vidéo complète"} : ${yt}`), Hashtags: rt(c.hashtags), "Texte écran": rt(c.hook), "Scènes": rt(JSON.stringify(sc)),
-        Production: { select: { name: "Visuels IA" } }, Type: { select: { name: "Short" } }, Language: { select: { name: lang } }, Channel: { select: { name: ar ? "Dr Fehmi AR" : "Fehmi Tlaies FR" } },
+        Production: { select: { name: "Visuels IA" } }, Type: { select: { name: "Short" } }, Language: { select: { name: lang } }, Channel: { select: { name: chanOf(lang, isPro(r)) } },
         "Pipeline Stage": { select: { name: "Scheduled" } }, "Statut publication": { select: { name: "En attente" } }, "Publish Date": { date: { start: d.toISOString() } },
         Link: { url: up.media_url }, "Source URL": { url: yt }, "Promo app": { checkbox: !!r.promo }
       }) });
