@@ -161,6 +161,7 @@ svg.fig{{position:absolute;left:0;top:0;width:{W}px;height:{HT}px;overflow:visib
 .note{{position:absolute;left:90px;right:90px;top:1560px;text-align:center;direction:{"rtl" if AR else "ltr"};font-family:{MONO};font-size:{26 if AR else 22}px;line-height:1.5;color:#A39AAB;opacity:0}}
 .cap{{position:absolute;left:70px;right:70px;top:1440px;text-align:center;direction:{"rtl" if AR else "ltr"};font-family:{SER};font-weight:{700 if AR else 600};font-size:{52 if AR else 50}px;line-height:1.3;opacity:0}}
 .cap span{{color:rgba(237,231,218,.32)}}
+{'.end{top:230px}.save{top:'+('470px' if AR else '440px')+'}' if KIND == 'marches' else ''}
 .wm{{position:absolute;left:0;right:0;top:1790px;text-align:center;font-family:"Mono";font-size:20px;letter-spacing:.5em;color:rgba(237,231,218,.28)}}
 '''
 js = ['window.__timelines=window.__timelines||{};var tl=gsap.timeline({paused:true});']
