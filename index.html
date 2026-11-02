@@ -174,7 +174,7 @@ h1{font-size:22px;margin:0}
 <script>
 const API = "https://hook.eu1.make.com/0jj57vomxlae4srwpwj6m74kdrkk24p2";
 // Mise à jour automatique : l'iPhone garde l'ancienne page en cache ; on compare avec la version en ligne et on recharge
-const BUILD = "2026-11-01.1";
+const BUILD = "2026-11-02.1";
 async function checkUpdate() {
   try {
     const t = await (await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" })).text();
@@ -1466,7 +1466,10 @@ const META = {
     labels: "4 ancrages concrets et validés, 14 caractères max (ex. SOMMEIL, MARCHE, UN AMI, LUMIÈRE DU JOUR)" },
   marches: { nom: "les marches", pour: "autocritique, échec, perfectionnisme, honte, découragement, rechute",
     actes: "fall (chaque échec tombe sur lui et devient un bloc ; 1 ou 2 temps forts) → critic (la voix intérieure qui juge : les blocs rougissent) → kind (il se parle autrement : il se relève) → climb (il monte bloc par bloc : chaque chute devient une marche) → rise (en haut, bras ouverts, lumière) → card → end",
-    labels: "4 ou 5 échecs concrets, 12 caractères max (ex. RECALÉ, REFUSÉ, ERREUR, RECHUTE)" }
+    labels: "4 ou 5 échecs concrets, 12 caractères max (ex. RECALÉ, REFUSÉ, ERREUR, RECHUTE)" },
+  duel: { nom: "le duel", pour: "perfectionnisme, procrastination, peur de l'échec, comparaison de deux attitudes (celui qui attend / celui qui essaie)",
+    actes: "try (celui de droite lance plusieurs fois vers sa cible, rate puis s'améliore ; \"n\" = nombre de lancers, 3 à 5 ; 2 ou 3 temps forts) → freeze (celui de gauche hésite, n'ose pas) → ltry (il lance enfin, rate, s'effondre) → win (la cible de droite s'illumine) → rise → card → end, les temps forts try et freeze/ltry alternent",
+    labels: "exactement 2 étiquettes : l'attitude de gauche puis celle de droite, 18 caractères max (ex. PERFECTIONNISTE, CELUI QUI ESSAIE)" }
 };
 const isMeta = r => !!r?.fx?.meta;
 function metaphorPrompt(o) {
@@ -1488,11 +1491,11 @@ RÈGLES DE RÉTENTION :
 - Les beats "card" et "end" ont "txt": "" ; leur "say" introduit la preuve puis dit la phrase de fin.
 - "end" : phrase à retenir, 3 à 7 mots, qui donne envie d'enregistrer ; "save" : « ${ar ? "احفظها للأيام الصعبة." : "À GARDER POUR LES JOURS LOURDS."} » ou une variante adaptée ; "note" : quand consulter un professionnel, 1 phrase courte.
 - La dernière image doit pouvoir s'enchaîner avec la première (la vidéo boucle).
-${ar ? "- Tous les textes affichés en arabe simplifié, étiquettes comprises ; aucun mot français à l'écran.\n" : ""}Réponds UNIQUEMENT en JSON : {"kind": "cartons|portes|attaches|marches", "technique": "id", "title": "titre YouTube 60 caractères max", "hook": "texte écran 3 à 6 mots", "description": "2-3 phrases + question, sans hashtags", "hashtags": "5 hashtags", "music": "calme|espoir|tension|mystere|nuit|oriental", "labels": [""], "paper": "${ar ? "غدا" : "DEMAIN"} (titre de la feuille, cartons seulement)", "beats": [{"act": "", "txt": "", "say": "", "hot": [""]}], "source": {"b": "ce que l'étude montre, 20 mots max", "i": "source exacte, en capitales"}, "end": "", "save": "", "note": ""}`;
+${ar ? "- Tous les textes affichés en arabe simplifié, étiquettes comprises ; aucun mot français à l'écran.\n" : ""}Réponds UNIQUEMENT en JSON : {"kind": "cartons|portes|attaches|marches|duel", "technique": "id", "title": "titre YouTube 60 caractères max", "hook": "texte écran 3 à 6 mots", "description": "2-3 phrases + question, sans hashtags", "hashtags": "5 hashtags", "music": "calme|espoir|tension|mystere|nuit|oriental", "labels": [""], "paper": "${ar ? "غدا" : "DEMAIN"} (titre de la feuille, cartons seulement)", "beats": [{"act": "", "txt": "", "say": "", "hot": [""]}], "source": {"b": "ce que l'étude montre, 20 mots max", "i": "source exacte, en capitales"}, "end": "", "save": "", "note": ""}`;
 }
 function cleanBeats(arr, kind) {
-  const ok = new Set(["intro", "drop", "shake", "paper", "unload", "close", "small", "open", "cut", "drift", "relink", "fall", "critic", "kind", "climb", "rise", "card", "end"]);
-  return (arr || []).filter(b => b && ok.has(b.act)).slice(0, 12).map(b => ({ act: b.act, txt: String(b.txt || "").slice(0, 90), say: String(b.say || "").trim().slice(0, 240), hot: (b.hot || []).map(String).slice(0, 2) }));
+  const ok = new Set(["intro", "drop", "shake", "paper", "unload", "close", "small", "open", "cut", "drift", "relink", "fall", "critic", "kind", "climb", "try", "freeze", "ltry", "win", "rise", "card", "end"]);
+  return (arr || []).filter(b => b && ok.has(b.act)).slice(0, 12).map(b => ({ act: b.act, txt: String(b.txt || "").slice(0, 90), say: String(b.say || "").trim().slice(0, 240), hot: (b.hot || []).map(String).slice(0, 2), ...(b.act === "try" ? { n: Math.max(2, Math.min(6, +b.n || 4)) } : {}) }));
 }
 async function createMeta(o, tries = 2) {
   const j = parseJSON((await api("gen", { prompt: metaphorPrompt(o) })).text);

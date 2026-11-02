@@ -10,7 +10,7 @@ D = sys.argv[1]
 W, HT, FLOOR = 1080, 1920, 1300
 job = json.load(open(f'{D}/job.json'))
 AR = job.get('lang') == 'ar'
-KIND = job.get('kind') if job.get('kind') in ('cartons', 'portes', 'attaches', 'marches') else 'cartons'
+KIND = job.get('kind') if job.get('kind') in ('cartons', 'portes', 'attaches', 'marches', 'duel') else 'cartons'
 beats = [b for b in job.get('beats', []) if str(b.get('txt') or b.get('say') or '').strip() or b.get('act') in ('rise', 'card', 'end')]
 LABELS = [str(x)[:22] for x in (job.get('labels') or [])][:6] or ['…']
 VOICE = os.path.exists(f'{D}/assets/voice.m4a')
@@ -24,7 +24,7 @@ def norm(s):
     return re.sub(r'[\W_]+', '', s)
 
 # 1. minutage : la voix réelle (mots horodatés) ou le temps de lecture
-MIN = {'drop': .8, 'unload': .75, 'close': .9, 'open': .6, 'cut': .9, 'relink': .8, 'fall': .85, 'climb': .75}
+MIN = {'drop': .8, 'unload': .75, 'close': .9, 'open': .6, 'cut': .9, 'relink': .8, 'fall': .85, 'climb': .75, 'try': .85}
 def need(b):  # durée minimale d'un temps fort, selon le texte et l'animation
     n = len(str(b.get('txt', '')).split())
     base = max(2.0, 1.1 + n * (.42 if AR else .36))
@@ -40,6 +40,9 @@ def spread(act):  # répartit les éléments (cartons, portes, attaches) sur les
     for j, i in enumerate(idx):
         beats[i]['_n'] = len(LABELS) // len(idx) + (1 if j < len(LABELS) % len(idx) else 0)
 for a in ('drop', 'unload', 'close', 'open', 'cut', 'relink', 'fall', 'climb'): spread(a)
+if KIND == 'duel':
+    for b in beats:
+        if b.get('act') == 'try': b['_n'] = int(b.get('n') or 4)
 
 words = []
 for bi, b in enumerate(beats):
@@ -69,7 +72,7 @@ if VOICE and words:
     # chaque temps fort garde au moins le temps de son animation : on insère du silence dans la voix si besoin
     def hold(b):
         a, n = b.get('act'), b.get('_n', 1)
-        return {'card': 4.4, 'end': 4.2, 'drop': .7 * n + .5, 'unload': .65 * n + .5, 'close': .75 * n + .5, 'open': .55 * n + .5, 'cut': .8 * n + .5, 'relink': .7 * n + .6, 'fall': .8 * n + .6, 'climb': .7 * n + .5, 'kind': 2.4, 'small': 2.4, 'rise': 2.0}.get(a, 1.6)
+        return {'card': 4.4, 'end': 4.2, 'drop': .7 * n + .5, 'unload': .65 * n + .5, 'close': .75 * n + .5, 'open': .55 * n + .5, 'cut': .8 * n + .5, 'relink': .7 * n + .6, 'fall': .8 * n + .6, 'climb': .7 * n + .5, 'try': .85 * n + .4, 'freeze': 2.6, 'ltry': 2.4, 'win': 2.2, 'kind': 2.4, 'small': 2.4, 'rise': 2.0}.get(a, 1.6)
     seg = [(o[i], o[i + 1] if i + 1 < len(o) else dur) for i in range(len(o))]
     starts, t = [], 0.0
     for i, (a, b) in enumerate(seg): starts.append(t); t += max(b - a, hold(beats[i]))
@@ -141,6 +144,13 @@ svg.fig{{position:absolute;left:0;top:0;width:{W}px;height:{HT}px;overflow:visib
 .door .tag{{position:absolute;left:-30px;right:-30px;top:-52px;text-align:center;font-family:{MONO};font-size:{24 if AR else 19}px;letter-spacing:{".1em" if not AR else "0"};color:#F6F2EA;white-space:nowrap}}
 .door .st{{position:absolute;left:8px;right:8px;top:118px;text-align:center;border:3px solid #E5484D;border-radius:4px;color:#E5484D;font-family:{MONO};font-weight:700;font-size:{24 if AR else 20}px;letter-spacing:{".12em" if not AR else "0"};transform:rotate(-12deg);opacity:0;background:rgba(7,6,10,.7)}}
 .anc{{position:absolute;width:0;height:0}}
+.ring{{position:absolute;width:124px;height:124px;border-radius:50%;border:6px solid #F6F2EA;box-shadow:0 0 16px rgba(246,242,234,.35);opacity:0}}
+.ring i{{position:absolute;left:44px;top:44px;width:24px;height:24px;border-radius:50%;background:#F6F2EA}}
+.dlab{{position:absolute;width:480px;text-align:center;font-family:{MONO};font-size:{34 if AR else 28}px;letter-spacing:{".18em" if not AR else "0"};color:#F1EBDF;opacity:0;white-space:nowrap}}
+.dcnt{{position:absolute;top:548px;width:480px;text-align:center;font-family:{MONO};font-size:{28 if AR else 23}px;letter-spacing:{".14em" if not AR else "0"};color:#A39AAB;opacity:0;white-space:nowrap;direction:{"rtl" if AR else "ltr"}}}
+.dcnt i{{color:#F2A541;font-style:normal}}
+.ball{{position:absolute;width:40px;height:40px;border-radius:50%;background:#F2A541;box-shadow:0 0 16px rgba(242,165,65,.9);opacity:0}}
+.dots3{{position:absolute;width:120px;text-align:center;font-family:"Fraunces";font-size:70px;color:#F1EBDF;opacity:0}}
 .anc i{{position:absolute;left:-14px;top:-14px;width:28px;height:28px;border-radius:50%;border:3px solid #F6F2EA;box-shadow:0 0 18px rgba(246,242,234,.5)}}
 .anc span{{position:absolute;top:24px;left:-160px;width:320px;text-align:center;font-family:{MONO};font-size:{26 if AR else 21}px;letter-spacing:{".12em" if not AR else "0"};color:#F6F2EA;white-space:nowrap}}
 .card{{position:absolute;left:90px;right:90px;top:250px;text-align:center;opacity:0;direction:{"rtl" if AR else "ltr"}}}
@@ -354,6 +364,69 @@ elif KIND == 'marches':  # chaque chute devient une marche : on remonte en se pa
             SFX.append(('pop', t + .35, -19)); k += 1
     cb = B('climb')
     if cb: js.append(f'tl.to("#cs{n}",{{opacity:0,duration:.3}},{cb[-1][1] - .2:.2f});')
+elif KIND == 'duel':  # deux personnages côte à côte : celui qui attend le parfait / celui qui essaie
+    L0, R0 = X(290) - X(540), X(790) - X(540)  # décalage de chaque personnage par rapport au centre
+    TY = 680  # hauteur des cibles
+    def fig2(pre, dx):
+        P0 = POSES['stand']
+        s = [f'<svg class="fig" viewBox="0 0 1080 1920"><g id="{pre}fig" transform="translate({dx},0)" filter="url(#glow)" stroke="#F6F2EA" stroke-width="9" stroke-linecap="round" fill="none">']
+        for a, b in SEGS: s.append(f'<line id="{pre}_{a}_{b}" x1="{P0[a][0]}" y1="{P0[a][1]}" x2="{P0[b][0]}" y2="{P0[b][1]}"/>')
+        s.append(f'<circle id="{pre}head" cx="{P0["head"][0]}" cy="{P0["head"][1]}" r="34" fill="{"#241C30" if AMB == "aube" else "#07060A"}"/></g></svg>')
+        return ''.join(s)
+    def pose2(pre, t, name, dur=.4, ease='power2.inOut'):
+        P = POSES[name]
+        for a, b in SEGS: js.append(f'tl.to("#{pre}_{a}_{b}",{{attr:{{x1:{P[a][0]},y1:{P[a][1]},x2:{P[b][0]},y2:{P[b][1]}}},duration:{dur},ease:"{ease}"}},{t:.2f});')
+        js.append(f'tl.to("#{pre}head",{{attr:{{cx:{P["head"][0]},cy:{P["head"][1]}}},duration:{dur},ease:"{ease}"}},{t:.2f});')
+    h.append('<svg class="fig" viewBox="0 0 1080 1920"><defs><filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="7" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs></svg>')
+    h.append(fig2('L', L0)); h.append(fig2('R', R0))
+    lab = (LABELS + ['', ''])[:2]
+    for side, dx, name in (('l', L0, lab[0]), ('r', R0, lab[1])):
+        cx = X(540) + dx
+        h.append(f'<div class="ring" id="{side}ring" style="left:{cx - 62:.0f}px;top:{TY - 62}px"><i></i></div>')
+        h.append(f'<div class="dlab" style="left:{cx - 240:.0f}px;top:500px">{esc(name)}</div>')
+    tries, wins = ('محاولات', 'نجاح') if AR else ('ESSAIS', 'RÉUSSIS')
+    h.append(f'<div class="dcnt" id="lc" style="left:{X(540) + L0 - 240:.0f}px">{tries} ×<span id="lcn">0</span></div>')
+    h.append(f'<div class="dcnt" id="rc" style="left:{X(540) + R0 - 240:.0f}px">{tries} ×<span id="rcn">0</span> · <i>{wins} ×<span id="rwn">0</span></i></div>')
+    h.append(f'<div class="dots3" id="think" style="left:{X(540) + L0 - 60:.0f}px;top:800px">…</div>')
+    js.append('tl.fromTo([".dlab",".ring","#lc","#rc"],{opacity:0,y:12},{opacity:1,y:0,duration:.4,stagger:.08},.15);')
+    seq = [0, 0, 1, 0, 1, 1, 0, 1, 1, 1, 1, 1]  # le tireur rate beaucoup au début, puis s'améliore
+    k = w = 0; nb = 0
+    def throw(pre, side, dx, t, hit, n):
+        global nb
+        hx = X(540) + dx + (-30 if AR else 30); hy = 840; cx = X(540) + dx
+        h.append(f'<div class="ball" id="ball{nb}" style="left:{hx - 20}px;top:{hy - 20}px"></div>')
+        pose2(pre, t, 'carry', .18); pose2(pre, t + .2, 'open', .18); pose2(pre, t + .55, 'stand', .3)
+        ex = (cx - hx) if hit else (cx - hx + (70 if nb % 2 else -80))
+        js.append(f'tl.set("#ball{nb}",{{opacity:1}},{t + .18:.2f});tl.to("#ball{nb}",{{x:{ex:.0f},duration:.55,ease:"none"}},{t + .2:.2f});tl.to("#ball{nb}",{{y:{TY - hy - 120},duration:.3,ease:"power2.out"}},{t + .2:.2f});tl.to("#ball{nb}",{{y:{(TY - hy + 30) if hit else (TY - hy + 240)},duration:.25,ease:"power2.in"}},{t + .5:.2f});tl.to("#ball{nb}",{{opacity:0,duration:.15}},{t + .78:.2f});')
+        if hit:
+            js.append(f'tl.fromTo("#{side}ring",{{borderColor:"#F2A541",boxShadow:"0 0 50px rgba(242,165,65,.9)"}},{{borderColor:"#F6F2EA",boxShadow:"0 0 16px rgba(246,242,234,.35)",duration:.6,immediateRender:false}},{t + .72:.2f});')
+            SFX.append(('pop', t + .72, -16))
+        else:
+            js.append(f'tl.fromTo("#{side}ring",{{borderColor:"#E5484D"}},{{borderColor:"#F6F2EA",duration:.5,immediateRender:false}},{t + .72:.2f});')
+            SFX.append(('tick', t + .72, -20))
+        SFX.append(('whoosh', t + .2, -24)); nb += 1
+    for a, b, m in B('try'):
+        step = max(.75, (b - a - .2) / max(1, m))
+        for j in range(m):
+            t = a + .1 + j * step; hit = seq[min(k, len(seq) - 1)]
+            throw('R', 'r', R0, t, hit, k); k += 1; w += hit
+            js.append(f'tl.set("#rcn",{{textContent:"{k}"}},{t + .72:.2f});tl.set("#rwn",{{textContent:"{w}"}},{t + .72:.2f});')
+    for a, b, m in B('freeze'):  # celui qui attend le moment parfait : il hésite, ne lance pas
+        pose2('L', a + .1, 'carry', .4)
+        js.append(f'tl.fromTo("#think",{{opacity:0}},{{opacity:1,duration:.3,yoyo:true,repeat:{max(1, int((b - a) / .6)) | 1}}},{a + .2:.2f});')
+        js.append(f'tl.to("#Lfig",{{x:"+=4",duration:.08,yoyo:true,repeat:{max(3, int((b - a) / .16)) | 1}}},{a + .3:.2f});')
+        js.append(f'tl.to("#lc",{{color:"#FF8A8D",duration:.4}},{a + .2:.2f});')
+        SFX.append(('heartbeat', a + .2, -18))
+    for a, b, m in B('ltry'):  # il finit par lancer une fois, rate, et s'effondre
+        throw('L', 'l', L0, a + .2, 0, 0)
+        js.append(f'tl.set("#lcn",{{textContent:"1"}},{a + .9:.2f});')
+        pose2('L', a + 1.0, 'kneel', .5)
+    for a, b, m in B('card')[:1]:  # la carte et la fin prennent le haut de l'écran
+        js.append(f'tl.to([".dlab",".dcnt"],{{opacity:0,duration:.4}},{a:.2f});')
+    for a, b, m in B('win'):
+        js.append(f'tl.to("#rring",{{borderColor:"#F2A541",boxShadow:"0 0 60px rgba(242,165,65,.95)",duration:.5}},{a + .1:.2f});')
+        pose2('R', a + .2, 'open', .6, 'power2.out')
+        SFX.append(('ding', a + .3, -16))
 else:  # attaches
     AN = [(170, 1230), (910, 1230), (250, 760), (830, 760), (540, 1290), (540, 640)][:n]
     AN = [(X(x), y) for x, y in AN]
@@ -402,10 +475,12 @@ rise = B('rise')
 if rise:
     a, b, m = rise[0]
     if KIND == 'marches': pose(a + .1, 'open', .8, 'power2.out')
-    elif KIND != 'attaches': pose(a + .1, 'stand', .9, 'power2.out')
+    elif KIND not in ('attaches', 'duel'): pose(a + .1, 'stand', .9, 'power2.out')
     js.append(f'tl.to("#light",{{opacity:1,duration:1.6,ease:"power1.out"}},{a:.2f});tl.to("#beam",{{opacity:1,duration:1.2}},{a + .3:.2f});')
     if AMB == 'aube': js.append(f'tl.fromTo("#rays",{{opacity:0,scale:.6}},{{opacity:1,scale:1,duration:1.4,ease:"expo.out"}},{a + .2:.2f});tl.to("#sun",{{scale:1.5,duration:1.6}},{a + .2:.2f});')
     if KIND == 'portes': js.append(f'tl.to("#fig",{{x:0,duration:1}},{a:.2f});')
+    if KIND == 'duel':  # la lumière vient sur celui qui a essayé
+        js.append(f'tl.set(["#rays","#sun","#beam","#light"],{{x:{X(790) - X(540)}}},{a:.2f});')
     if KIND == 'marches':  # la lumière vient sur lui, en haut des marches
         dx = steps[-1][0] - X(540)
         js.append(f'tl.set(["#rays","#sun","#beam","#light"],{{x:{dx:.0f}}},{a:.2f});tl.set("#sun",{{y:{steps[-1][1] - FLOOR:.0f}}},{a:.2f});')
@@ -450,7 +525,7 @@ if words:
         js.append(f'tl.set("#c{gi}",{{opacity:1}},{s0:.2f});tl.set("#c{gi}",{{opacity:0}},{e0:.2f});')
         for k, w in enumerate(g): js.append(f'tl.to("#w{gi}_{k}",{{color:"#F6F2EA",duration:.12}},{w["s"]:.2f});')
 h.append('<div class="wm">' + ('د. فهمي' if AR else 'DR FEHMI') + '</div>')
-js.append('tl.set("#fig",{opacity:1},0);')
+js.append('tl.set("#fig",{opacity:1},0);' if KIND != 'duel' else '')
 js.append(f'tl.fromTo("#cam",{{scale:1}},{{scale:1.06,duration:{END:.2f},ease:"none"}},0);' if KIND != 'attaches' else '')
 js.append(f'tl.to(["#end","#save","#note","#light","#beam",".paper"],{{opacity:0,duration:.6}},{END - .7:.2f});')
 js.append('window.__timelines["main"]=tl;')
