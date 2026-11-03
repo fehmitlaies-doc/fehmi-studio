@@ -26,17 +26,24 @@ for pi, p in enumerate(plans):
     for w in str(p['say']).split():
         if words and words[-1]['p'] == pi and re.fullmatch(r'[?!:;»…؟،.,]+', w): words[-1]['t'] += ' ' + w
         else: words.append({'t': w, 'p': pi})
-dur = probe(f'{D}/assets/voice.m4a')
+VOICE = os.path.exists(f'{D}/assets/voice.m4a')
+if not VOICE:  # texte seul : rythme de lecture
+    t = .3
+    for i, w in enumerate(words):
+        if i and w['p'] != words[i - 1]['p']: t += .55
+        w['s'], w['e'] = t, t + .3; t += .38 if len(w['t']) < 8 else .5
+    dur = t + .4
+else: dur = probe(f'{D}/assets/voice.m4a')
 try: asr = [w for w in json.load(open(f'{D}/assets/transcript.json')) if str(w.get('text', '')).strip()]
 except Exception: asr = []
-A, B = [norm(w['t']) for w in words], [norm(x['text']) for x in asr]
+A, B = [norm(w['t']) for w in words], [norm(x['text']) for x in asr] if VOICE else []
 for tag, i1, i2, j1, j2 in difflib.SequenceMatcher(None, A, B, autojunk=False).get_opcodes():
     if tag == 'equal' or (tag == 'replace' and i2 - i1 == j2 - j1):
         for k in range(i2 - i1): words[i1 + k]['s'], words[i1 + k]['e'] = asr[j1 + k]['start'], asr[j1 + k]['end']
     elif tag == 'replace' and i2 > i1 and j2 > j1:
         s0, e0, n = asr[j1]['start'], asr[j2 - 1]['end'], i2 - i1
         for k in range(n): words[i1 + k]['s'], words[i1 + k]['e'] = s0 + (e0 - s0) * k / n, s0 + (e0 - s0) * (k + 1) / n
-if not any('s' in w for w in words):
+if VOICE and not any('s' in w for w in words):
     for k, w in enumerate(words): w['s'], w['e'] = .2 + (dur - .4) * k / len(words), .2 + (dur - .4) * (k + 1) / len(words)
 for i, w in enumerate(words):
     if 's' not in w:
@@ -157,11 +164,69 @@ def picto(i, p, a, b):
         js.append(f'tl.to("#{u}a",{{opacity:.25,duration:{max(.6, d * .5):.2f}}},{a + d * .45:.2f});')
         if P.get('src'): h.append(f'<div class="src" id="{u}s">{esc(P["src"])}</div>'); js.append(f'tl.fromTo("#{u}s",{{opacity:0}},{{opacity:1,duration:.3}},{a + .4:.2f});tl.set("#{u}s",{{opacity:0}},{b:.2f});')
         return s
+    if t == 'clock':
+        s = (f'<circle cx="280" cy="280" r="190" fill="none" stroke="{WH}" stroke-width="14"/>' + ''.join(f'<line x1="280" y1="110" x2="280" y2="135" stroke="{WH}" stroke-width="8" transform="rotate({k * 30} 280 280)"/>' for k in range(12))
+             + f'<line id="{u}m" x1="280" y1="280" x2="280" y2="140" stroke="{AC}" stroke-width="12" stroke-linecap="round"/><line x1="280" y1="280" x2="370" y2="280" stroke="{WH}" stroke-width="12" stroke-linecap="round"/><circle cx="280" cy="280" r="16" fill="{AC}"/>')
+        if P.get('text'): s += f'<text x="280" y="530" fill="{AC}" font-family="Anton" font-size="56" text-anchor="middle">{esc(P["text"])[:14]}</text>'
+        js.append(f'tl.to("#{u}m",{{rotation:360,svgOrigin:"280 280",duration:{max(.8, d):.2f},ease:"none"}},{a:.2f});'); SFX.append(('tick', a + .2, -20))
+        return s
+    if t == 'phone':
+        s = (f'<rect x="170" y="70" width="220" height="420" rx="36" fill="none" stroke="{WH}" stroke-width="14"/><rect x="195" y="110" width="170" height="320" rx="10" fill="{AC}" opacity=".18"/>'
+             + ''.join(f'<rect id="{u}n{k}" x="205" y="{125 + k * 70}" width="150" height="52" rx="12" fill="{AC if k == 0 else WH}" opacity="0"/>' for k in range(4)))
+        for k in range(4): js.append(f'tl.fromTo("#{u}n{k}",{{opacity:0,x:-30}},{{opacity:.95,x:0,duration:.2,immediateRender:false}},{a + .2 + k * min(.4, d / 5):.2f});')
+        SFX.append(('phone', a + .2, -20)); return s
+    if t == 'shield':
+        s = (f'<path d="M280,60 L460,130 V270 C460,390 370,470 280,510 C190,470 100,390 100,270 V130 Z" fill="none" stroke="{WH}" stroke-width="14" stroke-linejoin="round"/>'
+             f'<path id="{u}c" d="M190,280 L255,345 L380,215" fill="none" stroke="{AC}" stroke-width="22" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="320" stroke-dashoffset="320"/>')
+        js.append(f'tl.to("#{u}c",{{strokeDashoffset:0,duration:.5,ease:"power2.out"}},{a + .35:.2f});'); return s
+    if t == 'bolt':
+        s = f'<path id="{u}b" d="M320,40 L150,300 H270 L230,520 L420,230 H300 Z" fill="{AC}"/>'
+        js.append(f'tl.fromTo("#{u}b",{{opacity:.2}},{{opacity:1,duration:.08,yoyo:true,repeat:5,immediateRender:false}},{a + .15:.2f});'); SFX.append(('impact', a + .15, -18)); return s
+    if t == 'weight':
+        s = (f'<g id="{u}w"><path d="M210,170 a70,60 0 0 1 140,0" fill="none" stroke="{WH}" stroke-width="22"/><path d="M130,200 H430 L470,470 H90 Z" fill="{WH}"/>'
+             f'<text x="280" y="360" fill="#0A090C" font-family="{"Cairo" if AR else "Anton"}" font-size="{60 if len(str(P.get("text", ""))) < 9 else 42}" text-anchor="middle">{esc(P.get("text", ""))[:14]}</text></g>')
+        js.append(f'tl.fromTo("#{u}w",{{y:-300}},{{y:0,duration:.35,ease:"power3.in",immediateRender:false}},{a + .05:.2f});'); SFX.append(('impact', a + .38, -14)); return s
+    if t == 'times':
+        return f'<text x="280" y="330" fill="{AC}" font-family="Anton" font-size="260" text-anchor="middle">{esc(P.get("text", "×10"))[:5]}</text>'
+    if t == 'number':
+        return f'<text x="280" y="360" fill="{WH}" font-family="Anton" font-size="340" text-anchor="middle">{esc(P.get("text", "3"))[:4]}</text>'
+    if t == 'check':
+        items = [str(x)[:22] for x in (P.get('items') or ['', '', ''])][:3]; s = ''
+        for k, it in enumerate(items):
+            y = 120 + k * 140
+            s += (f'<g id="{u}i{k}" opacity="0"><rect x="40" y="{y}" width="90" height="90" rx="16" fill="none" stroke="{WH}" stroke-width="10"/><path d="M60,{y + 45} L82,{y + 68} L118,{y + 22}" fill="none" stroke="{AC}" stroke-width="14" stroke-linecap="round"/>'
+                  f'<text x="160" y="{y + 62}" fill="{WH}" font-family="{"Cairo" if AR else "Anton"}" font-size="52">{esc(it)}</text></g>')
+            js.append(f'tl.to("#{u}i{k}",{{opacity:1,duration:.2}},{a + .2 + k * max(.35, d / 4):.2f});'); SFX.append(('pop', a + .2 + k * max(.35, d / 4), -20))
+        return s
+    if t == 'battery':
+        f0, f1 = float(P.get('from', .9)), float(P.get('to', .1))
+        s = (f'<rect x="80" y="170" width="380" height="220" rx="30" fill="none" stroke="{WH}" stroke-width="16"/><rect x="460" y="230" width="34" height="100" rx="10" fill="{WH}"/>'
+             f'<rect id="{u}l" x="104" y="194" width="{332 * f0:.0f}" height="172" rx="16" fill="{AC}"/>')
+        js.append(f'tl.to("#{u}l",{{attr:{{width:{max(10, 332 * f1):.0f}}},duration:{max(.8, d * .7):.2f},ease:"power1.inOut"}},{a + .2:.2f});'); return s
+    if t == 'moon':
+        s = f'<path d="M330,90 A190,190 0 1 0 470,380 A150,150 0 1 1 330,90 Z" fill="{WH}"/>' + ''.join(f'<text id="{u}z{k}" x="{380 + k * 40}" y="{170 - k * 50}" fill="{AC}" font-family="Anton" font-size="{50 + k * 14}" opacity="0">Z</text>' for k in range(3))
+        for k in range(3): js.append(f'tl.fromTo("#{u}z{k}",{{opacity:0,y:20}},{{opacity:1,y:0,duration:.3,immediateRender:false}},{a + .3 + k * .3:.2f});')
+        return s
+    if t == 'cloud':
+        s = f'<path d="M140,300 a90,90 0 0 1 40,-170 a110,110 0 0 1 200,10 a80,80 0 0 1 40,160 Z" fill="{WH}"/>' + ''.join(f'<line id="{u}r{k}" x1="{170 + k * 55}" y1="330" x2="{150 + k * 55}" y2="390" stroke="{AC}" stroke-width="10" stroke-linecap="round"/>' for k in range(5))
+        for k in range(5): js.append(f'tl.fromTo("#{u}r{k}",{{y:0,opacity:1}},{{y:120,opacity:0,duration:.6,repeat:{max(1, int(d / .6) - 1)},ease:"none",immediateRender:false}},{a + k * .12:.2f});')
+        return s
+    if t == 'arrow':
+        up = P.get('dir', 'up') != 'down'
+        s = f'<g id="{u}a" transform="rotate({0 if up else 180} 280 280)"><path d="M280,60 L460,280 H350 V500 H210 V280 H100 Z" fill="{AC}"/></g>'
+        js.append(f'tl.fromTo("#{u}a",{{y:{60 if up else -60}}},{{y:0,duration:.4,ease:"back.out(2)",immediateRender:false}},{a + .05:.2f});'); return s
+    if t == 'breath':
+        s = f'<circle id="{u}o" cx="280" cy="280" r="120" fill="{AC}" opacity=".85"/><circle cx="280" cy="280" r="230" fill="none" stroke="{WH}" stroke-width="6" opacity=".4"/>'
+        js.append(f'tl.fromTo("#{u}o",{{attr:{{r:110}}}},{{attr:{{r:220}},duration:2,yoyo:true,repeat:{max(1, int(d / 2)) | 1},ease:"sine.inOut",immediateRender:false}},{a + .2:.2f});'); SFX.append(('breath', a + .2, -18)); return s
+    if t == 'cross':
+        s = f'<g id="{u}x" stroke="{"#E5484D"}" stroke-width="40" stroke-linecap="round"><line x1="130" y1="130" x2="430" y2="430"/><line x1="430" y1="130" x2="130" y2="430"/></g>'
+        if P.get('text'): s += f'<text x="280" y="530" fill="{WH}" font-family="{"Cairo" if AR else "Anton"}" font-size="56" text-anchor="middle" text-decoration="line-through">{esc(P["text"])[:16]}</text>'
+        js.append(f'tl.fromTo("#{u}x",{{scale:1.6,opacity:0,svgOrigin:"280 280"}},{{scale:1,opacity:1,svgOrigin:"280 280",duration:.25,ease:"back.out(2)",immediateRender:false}},{a + .2:.2f});'); SFX.append(('impact', a + .3, -16)); return s
     return fig(280, 300, 1)
 for i, p in enumerate(plans):
     a, b = starts[i], ends[i]
     h.append(f'<div class="pic" id="pic{i}"><svg viewBox="0 0 560 560">{picto(i, p, a, b)}</svg></div>')
-    js.append(f'tl.fromTo("#pic{i}",{{opacity:0,scale:.7}},{{opacity:1,scale:1,duration:.35,ease:"back.out(1.8)"}},{a + .02:.2f});tl.set("#pic{i}",{{opacity:0}},{b:.2f});')
+    js.append(f'tl.fromTo("#pic{i}",{{opacity:0,scale:.7}},{{opacity:1,scale:1,duration:.35,ease:"back.out(1.8)"}},{a + .02:.2f});tl.to("#pic{i}",{{scale:1.06,duration:{max(.4, b - a - .4):.2f},ease:"sine.inOut"}},{a + .37:.2f});tl.set("#pic{i}",{{opacity:0}},{b:.2f});')
     SFX.append(('pop', a + .05, -24))
 
 # 6. les mots, calés sur la voix
@@ -183,10 +248,10 @@ open(f'{D}/index.html', 'w').write('\n'.join(h))
 
 # 7. mixage : voix + musique discrète + effets
 Aa = f'{D}/assets'; music = job.get('music') or 'tension'
-inp, fc, lab = ['-i', f'{Aa}/voice.m4a'], ['[0:a]apad[v]'], ['[v]']
+inp, fc, lab = (['-i', f'{Aa}/voice.m4a'], ['[0:a]apad[v]'], ['[v]']) if VOICE else ([], [], [])
 if music != 'none' and os.path.exists(f'{Aa}/music_{music}.m4a'):
-    inp += ['-stream_loop', '-1', '-i', f'{Aa}/music_{music}.m4a']
-    fc.append(f'[1:a]atrim=0:{END:.2f},volume=-22dB,afade=t=in:d=1,afade=t=out:st={END - 2:.2f}:d=2[m]'); lab.append('[m]')
+    mi = len([x for x in inp if x == '-i']); inp += ['-stream_loop', '-1', '-i', f'{Aa}/music_{music}.m4a']
+    fc.append(f'[{mi}:a]atrim=0:{END:.2f},volume={-22 if VOICE else -13}dB,afade=t=in:d=1,afade=t=out:st={END - 2:.2f}:d=2[m]'); lab.append('[m]')
 for s, t, g in SFX:
     if not os.path.exists(f'{Aa}/sfx_{s}.m4a') or t >= END: continue
     i = len([x for x in inp if x == '-i']); inp += ['-i', f'{Aa}/sfx_{s}.m4a']
