@@ -37,7 +37,7 @@ for i, p in enumerate(job.get('plans') or []):
         n = p.get('img') if p.get('img') in names else 'standing'
         shutil.copy(f'{PACK}/{n}.jpg', f'{D}/assets/{n}.jpg')
         p['_file'] = f'{n}.jpg'
-for f in ('Fraunces.ttf', 'Archivo.ttf', 'Cairo-ar.ttf', 'Cairo-la.ttf', 'Mono.ttf'):
+for f in ('Fraunces.ttf', 'Archivo.ttf', 'Cairo-ar.ttf', 'Cairo-la.ttf', 'Mono.ttf', 'Anton.woff2'):
     shutil.copy(f'{PACK}/{f}', f'{D}/assets/{f}')
 for f in os.listdir(f'{PACK}/music'):
     shutil.copy(f'{PACK}/music/{f}', f'{D}/assets/music_{f}')
