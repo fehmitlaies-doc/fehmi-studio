@@ -174,7 +174,7 @@ h1{font-size:22px;margin:0}
 <script>
 const API = "https://hook.eu1.make.com/0jj57vomxlae4srwpwj6m74kdrkk24p2";
 // Mise à jour automatique : l'iPhone garde l'ancienne page en cache ; on compare avec la version en ligne et on recharge
-const BUILD = "2026-11-03.1";
+const BUILD = "2026-11-03.2";
 async function checkUpdate() {
   try {
     const t = await (await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" })).text();
@@ -1000,7 +1000,19 @@ const STYLES = {
   neon: { label: "Néon 3D", character: "a human figure made of glowing teal and gold wireframe lines", prompt: "holographic 3D wireframe render, glowing neon mesh lines, teal and gold neon on deep navy black background, human figures made of luminous grid lines, cinematic lighting, depth of field, vertical 9:16 composition, no text, no letters" }
 };
 const defStyle = lang => lang === "عربي" ? "neon" : "ombre";
+// Texte lu par la voix : « 3 h » → « 3 heures », « 20 min » → « 20 minutes » (sinon la voix dit « trois h »)
+function sayUnits(t, lang) {
+  if (lang === "Arabic") return t.replace(/(\d+)\s?(?:h|س)(?=[\s.,!?؟،]|$)/g, "$1 ساعات");
+  return t
+    .replace(/(\d{1,2})\s?h\s?(\d{2})\b/gi, (m, a, b) => `${a} heure${+a > 1 ? "s" : ""} ${b}`)
+    .replace(/(\d+)\s?h(?=[\s.,!?;:…)]|$)/gi, (m, a) => `${a} heure${+a > 1 ? "s" : ""}`)
+    .replace(/(\d+)\s?min(?:s)?\b\.?/gi, (m, a) => `${a} minute${+a > 1 ? "s" : ""}`)
+    .replace(/(\d+)\s?s(?:ec)?\b(?=[\s.,!?;:…]|$)/g, (m, a) => `${a} seconde${+a > 1 ? "s" : ""}`)
+    .replace(/(\d+)\s?%/g, "$1 pour cent")
+    .replace(/(\d+)\s?km\b/gi, "$1 kilomètres").replace(/(\d+)\s?kg\b/gi, "$1 kilos");
+}
 async function falRun(model, input) {
+  if (/speech/.test(model) && input.text) input = { ...input, text: sayUnits(input.text, input.language_boost) };
   const r = await api("fal", { model, input: JSON.stringify(input) });
   if (r.status !== 200) throw new Error(`fal ${r.status} : ${JSON.stringify(r.data).slice(0, 140)}`);
   return r.data;
@@ -1361,6 +1373,7 @@ ${o.lang === "ar" ? "Vidéo en arabe : TOUS les textes affichés sont en arabe, 
 const MYTHS = "« on n'utilise que 10 % du cerveau », cerveau gauche/droit, « 21 jours pour créer une habitude », styles d'apprentissage, dopamine = « hormone du plaisir », dépression = « simple déséquilibre chimique », sérotonine « hormone du bonheur », « le stress est toujours mauvais », catharsis (« crier libère la colère »), « 7 % des mots / 93 % non verbal »";
 const EVIDENCE = `EXACTITUDE (règle absolue, le Dr Fehmi est médecin psychiatre : zéro invention) :
 - Chaque affirmation doit être validée par la psychologie, la psychiatrie, la psychothérapie ou la psychoéducation actuelles : consensus (DSM-5-TR, CIM-11), recommandations (HAS, NICE, APA, OMS), méta-analyses et revues Cochrane, ou la source fournie. Dans le doute, ne le dis pas.
+- Texte parlé : écris les heures et unités comme on les prononce (« 3 heures du matin », « 20 minutes », « 50 pour cent »), jamais « 3 h », « 20 min » ou « % ».
 - Jamais de chiffre, pourcentage, durée, statistique, étude, auteur ou citation qui ne figure pas dans les sources fournies.
 - Pas de mythes de pop-psychologie : ${MYTHS}.
 - Mécanismes cérébraux : simplifie sans déformer ; sinon parle du vécu et du comportement plutôt que des neurones.
