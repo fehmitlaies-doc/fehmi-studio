@@ -236,9 +236,9 @@ def sc_marches(t0, s):
         x, y = x0 + k * sw + 60, y0 - k * sh
         tw(f'#{g}', f'{{keyframes:[{{y:{y + sh - 70},x:{x - 30},duration:.3,ease:"power2.out"}},{{y:{y},x:{x},duration:.25,ease:"power2.in"}}]}}', a)
         lab = words[k - 1] if k - 1 < len(words) else ''
-        label(lab, X(x0 + (k - 1) * sw + 60), y0 - (k - 1) * sh + 20, DIM if k < n - 1 else DIM, 22, a - .2, t0 + LEN['marches'])
+        label(lab, X(x0 + (k - 1) * sw + 60), y0 - (k - 1) * sh + 24, "#C9C1D2", 27, a - .2, t0 + LEN['marches'])
         SFX.append(('pop', a + .5, -22)); a += .8
-    label(s.get('bot') or '', X(x0 + (n - 1) * sw + 60), y0 - (n - 1) * sh + 30, GOLD, 26, a - .3, t0 + LEN['marches'])
+    label(s.get("bot") or "", X(x0 + (n - 1) * sw + 60), y0 - (n - 1) * sh - 210, GOLD, 42, a - .3, t0 + LEN['marches'])
     SFX.append(('ding', a, -16))
     label(s.get('top'), 540, TOPY + 20, WHITE, 48, t0 + .2, t0 + LEN['marches'])
 
