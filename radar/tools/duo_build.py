@@ -19,10 +19,11 @@ LEN = {'pont': 8.5, 'collines': 8.5, 'feu': 8.0, 'pente': 8.5, 'vagues': 7.5, 'i
 TOPY, BOTY = 360, 1060  # haut de chaque panneau (600 px de haut)
 FONT = '"Cairo-ar"' if AR else '"Archivo"'
 
-starts, t = [], .3
+SHORT = bool(job.get('short'))  # boucle courte : une accroche en haut dès la 1re image, pas de carte finale
+starts, t = [], (0 if SHORT else .3)
 for s in scenes: starts.append(t); t += LEN[s['k']]
 END_A = t
-END = END_A + 5.2
+END = END_A + (1.4 if SHORT else 5.2)
 
 svg, js, SFX = [], ['window.__timelines=window.__timelines||{};var tl=gsap.timeline({paused:true});'], []
 labels = []  # étiquettes HTML (non miroir)
@@ -52,6 +53,7 @@ def push(i, at):  # bras tendus vers l'avant
     tw(f'#{i}a1', '{attr:{x2:26,y2:-80},duration:.25}', at); tw(f'#{i}a2', '{attr:{x2:30,y2:-74},duration:.25}', at)
 
 def label(txt, x, y, col, size=34, at=0, out=0, sc=None):
+    if SHORT and len(scenes) == 1: out = END + 1  # boucle : les étiquettes restent jusqu'à la fin
     i = nid('lb')
     labels.append(f'<div class="lb" id="{i}" style="left:{x - 300}px;top:{y}px;color:{col};font-size:{size}px;text-shadow:0 0 18px {col}55">{esc(txt)}</div>')
     js.append(f'tl.fromTo("#{i}",{{opacity:0,y:10}},{{opacity:1,y:0,duration:.4,ease:"power2.out"}},{at:.2f});tl.to("#{i}",{{opacity:0,duration:.3}},{out - .3:.2f});')
@@ -251,8 +253,8 @@ for i, s in enumerate(scenes):
     FN[s['k']](t0, s)
     svg.append('</g>')
     js.append(f'tl.set("#sc{i}",{{opacity:1}},{t0:.2f});' if i == 0 else f'tl.fromTo("#sc{i}",{{opacity:0}},{{opacity:1,duration:.35}},{t0:.2f});')
-    js.append(f'tl.to("#sc{i}",{{opacity:0,duration:.35}},{t1 - .35:.2f});')
-    if s.get('title'):
+    if not (SHORT and i == len(scenes) - 1): js.append(f'tl.to("#sc{i}",{{opacity:0,duration:.35}},{t1 - .35:.2f});')
+    if s.get('title') and not SHORT:
         titles.append(f'<div class="ti" id="ti{i}">{esc(s["title"])}</div>')
         js.append(f'tl.fromTo("#ti{i}",{{opacity:0,y:-10}},{{opacity:1,y:0,duration:.4}},{t0 + .05:.2f});tl.to("#ti{i}",{{opacity:0,duration:.3}},{t1 - .35:.2f});')
     if i: SFX.append(('whoosh', t0, -22))
@@ -261,7 +263,7 @@ for i, s in enumerate(scenes):
         sep = nid('sp'); svg.append(f'<line id="{sep}" x1="140" y1="985" x2="940" y2="985" stroke="#2A2730" stroke-width="2" opacity="0"/>')
         js.append(f'tl.set("#{sep}",{{opacity:1}},{t0:.2f});tl.set("#{sep}",{{opacity:0}},{t1:.2f});')
 
-SFX.append(('riser', END_A - 1.2, -22)); SFX.append(('ding', END_A + .3, -17))
+if not SHORT: SFX.append(('riser', END_A - 1.2, -22)); SFX.append(('ding', END_A + .3, -17))
 css = f'''
 @font-face{{font-family:"Archivo";src:url(assets/Archivo.ttf)}}@font-face{{font-family:"Cairo-ar";src:url(assets/Cairo-ar.ttf)}}@font-face{{font-family:"Mono";src:url(assets/Mono.ttf)}}
 html,body{{margin:0;background:#050407}}#root{{position:relative;width:{W}px;height:{HT}px;overflow:hidden;background:radial-gradient(ellipse at 50% 40%,#141118 0%,#060508 70%)}}
@@ -273,6 +275,9 @@ svg.sc{{position:absolute;left:0;top:0;width:{W}px;height:{HT}px}}
 .src{{position:absolute;left:90px;right:90px;top:1120px;text-align:center;font-family:"Mono";font-size:24px;letter-spacing:.08em;color:#8C8496;opacity:0}}
 .save{{position:absolute;left:60px;right:60px;top:1260px;text-align:center;font-family:{FONT};font-weight:700;font-size:{40 if AR else 36}px;color:{GOLD};direction:{"rtl" if AR else "ltr"};opacity:0}}
 .note{{position:absolute;left:90px;right:90px;top:1620px;text-align:center;font-family:{FONT};font-size:{26 if AR else 24}px;color:#8C8496;direction:{"rtl" if AR else "ltr"};opacity:0}}
+.hk{{position:absolute;left:50px;right:50px;top:110px;text-align:center;font-family:{FONT};font-weight:800;font-size:{70 if AR else 64}px;line-height:1.15;color:{WHITE};direction:{"rtl" if AR else "ltr"};text-shadow:0 4px 18px #000}}
+.hk b{{color:{GOLD}}}
+.sh{{position:absolute;left:60px;right:60px;top:1640px;text-align:center;font-family:{FONT};font-weight:800;font-size:{50 if AR else 46}px;color:{GOLD};direction:{"rtl" if AR else "ltr"};opacity:0;text-shadow:0 3px 14px #000}}
 .wm{{position:absolute;left:0;right:0;top:1800px;text-align:center;font-family:"Mono";font-size:20px;letter-spacing:.5em;color:rgba(237,231,218,.28)}}
 '''
 defs = ('<defs><filter id="gl" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>'
@@ -291,9 +296,17 @@ h = [f'<!DOCTYPE html><html lang="{"ar" if AR else "fr"}"><head><meta charset="U
      f'<div class="save" id="save">{esc(job.get("save") or ("احفظ الفيديو وأرسله لمن يحتاجه." if AR else "Enregistre-la. Envoie-la à quelqu'un."))}</div>',
      f'<div class="note" id="note">{esc(job.get("note") or ("للتوعية فقط، لا يعوّض استشارة مختص." if AR else "Information générale : ne remplace pas une consultation."))}</div>',
      '<div class="wm">' + ('د. فهمي' if AR else 'DR FEHMI') + '</div>']
-js.append(f'tl.fromTo("#end",{{opacity:0,scale:.96}},{{opacity:1,scale:1,duration:.7,ease:"expo.out"}},{END_A + .2:.2f});')
-js.append(f'tl.fromTo("#src",{{opacity:0}},{{opacity:1,duration:.5}},{END_A + 1.2:.2f});tl.fromTo("#save",{{opacity:0,y:10}},{{opacity:1,y:0,duration:.5}},{END_A + 1.8:.2f});tl.fromTo("#note",{{opacity:0}},{{opacity:1,duration:.5}},{END_A + 2.2:.2f});')
-js.append(f'tl.to(["#end","#src","#save","#note"],{{opacity:0,duration:.6}},{END - .7:.2f});')
+if SHORT:
+    hk = esc(job.get('hook'))
+    for w in (job.get('hook_hot') or [])[:2]:
+        if w and esc(w) in hk: hk = hk.replace(esc(w), f'<b>{esc(w)}</b>', 1)
+    h.append(f'<div class="hk" id="hk">{hk}</div><div class="sh" id="sh">{esc(job.get("end"))}</div>')
+    js.append(f'tl.fromTo("#sh",{{opacity:0,y:12}},{{opacity:1,y:0,duration:.4}},{END_A - 1.4:.2f});')
+    SFX.append(('ding', END_A - 1.3, -18))
+else:
+    js.append(f'tl.fromTo("#end",{{opacity:0,scale:.96}},{{opacity:1,scale:1,duration:.7,ease:"expo.out"}},{END_A + .2:.2f});')
+    js.append(f'tl.fromTo("#src",{{opacity:0}},{{opacity:1,duration:.5}},{END_A + 1.2:.2f});tl.fromTo("#save",{{opacity:0,y:10}},{{opacity:1,y:0,duration:.5}},{END_A + 1.8:.2f});tl.fromTo("#note",{{opacity:0}},{{opacity:1,duration:.5}},{END_A + 2.2:.2f});')
+    js.append(f'tl.to(["#end","#src","#save","#note"],{{opacity:0,duration:.6}},{END - .7:.2f});')
 js.append('window.__timelines["main"]=tl;')
 h.append('</div><script>' + '\n'.join(js) + '</script></body></html>')
 open(f'{D}/index.html', 'w').write('\n'.join(h))
