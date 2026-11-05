@@ -22,7 +22,7 @@ j = json.load(open(sys.argv[1]))
 for v in [j.get('voice'), j.get('upload'), *(j.get('voices') or [])]:
     if v: print('::add-mask::' + v)
 PY
-LONG=$(python3 -c "import json,sys;f=json.load(open(sys.argv[1])).get('format');print(1 if f=='long' else 2 if f=='metaphor' else 3 if f=='kinetic' else 0)" "$W/job.json")
+LONG=$(python3 -c "import json,sys;f=json.load(open(sys.argv[1])).get('format');print(1 if f=='long' else 2 if f=='metaphor' else 3 if f=='kinetic' else 4 if f=='duo' else 0)" "$W/job.json")
 PUT=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1])).get('upload') or '')" "$W/job.json")
 python3 "$ROOT/radar/tools/prepare.py" "$W"
 LC=$(python3 -c "import json,sys;print(json.load(open(sys.argv[1])).get('lang','fr'))" "$W/job.json")
@@ -32,7 +32,7 @@ if [ -f assets/voice.m4a ]; then  # format Métaphore « texte seul » : pas de 
   TP=$(python3 -c "import json;print(json.loads(open('tr.out').read().strip().splitlines()[-1])['transcriptPath'])")
   [ "$TP" -ef assets/transcript.json ] || cp "$TP" assets/transcript.json
 fi
-if [ "$LONG" = 1 ]; then python3 "$ROOT/radar/tools/long_build.py" "$W"; elif [ "$LONG" = 2 ]; then python3 "$ROOT/radar/tools/metaphor_build.py" "$W"; elif [ "$LONG" = 3 ]; then python3 "$ROOT/radar/tools/kinetic_build.py" "$W"; else python3 "$ROOT/radar/tools/radar_build.py" "$W"; fi
+if [ "$LONG" = 1 ]; then python3 "$ROOT/radar/tools/long_build.py" "$W"; elif [ "$LONG" = 2 ]; then python3 "$ROOT/radar/tools/metaphor_build.py" "$W"; elif [ "$LONG" = 3 ]; then python3 "$ROOT/radar/tools/kinetic_build.py" "$W"; elif [ "$LONG" = 4 ]; then python3 "$ROOT/radar/tools/duo_build.py" "$W"; else python3 "$ROOT/radar/tools/radar_build.py" "$W"; fi
 $HF lint || true
 $HF render --output out.mp4
 ls -la out.mp4
