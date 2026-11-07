@@ -219,10 +219,10 @@ def sc_iceberg(t0, s):
     items = [x for x in (s.get('items') or []) if x][:4]
     for k, it in enumerate(items):
         yy = sea + 120 + k * 120
-        label(it, 540, yy, WHITE, 42, t0 + 2.2 + k * .9, t0 + LEN['iceberg'])
-        SFX.append(('pop', t0 + 2.2 + k * .9, -22))
+        label(it, 540, yy, WHITE, 42, (t0 + .05) if s.get('items_first') else (t0 + 2.2 + k * .9), t0 + LEN['iceberg'])
+        if not s.get('items_first'): SFX.append(('pop', t0 + 2.2 + k * .9, -22))
     label(s.get('top'), 540, TOPY + 60, GOLD, 48, t0 + .4, t0 + LEN['iceberg'])
-    label(s.get('bot'), 540, sea + 24, '#9FE3F7', 40, t0 + 1.6, t0 + LEN['iceberg'])
+    label(s.get('bot'), 540, sea + 24, '#9FE3F7', 40, (t0 + .05) if s.get('items_first') else (t0 + 1.6), t0 + LEN['iceberg'])
 
 def sc_marches(t0, s):
     words = [x for x in (s.get('items') or []) if x][:6] or ['…']
