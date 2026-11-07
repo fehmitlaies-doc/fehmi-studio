@@ -56,7 +56,9 @@ def label(txt, x, y, col, size=34, at=0, out=0, sc=None):
     if SHORT and len(scenes) == 1: out = END + 1  # boucle : les étiquettes restent jusqu'à la fin
     i = nid('lb')
     labels.append(f'<div class="lb" id="{i}" style="left:{x - 300}px;top:{y}px;color:{col};font-size:{size}px;text-shadow:0 0 18px {col}55">{esc(txt)}</div>')
-    js.append(f'tl.fromTo("#{i}",{{opacity:0,y:10}},{{opacity:1,y:0,duration:.4,ease:"power2.out"}},{at:.2f});tl.to("#{i}",{{opacity:0,duration:.3}},{out - .3:.2f});')
+    if SHORT and at < .8: js.append(f'tl.set("#{i}",{{opacity:1}},0);')
+    else: js.append(f'tl.fromTo("#{i}",{{opacity:0,y:10}},{{opacity:1,y:0,duration:.4,ease:"power2.out"}},{at:.2f});')
+    js.append(f'tl.to("#{i}",{{opacity:0,duration:.3}},{out - .3:.2f});')
 
 def path_pts(f, x0, x1, n=40):
     return [(x0 + (x1 - x0) * k / n, f(x0 + (x1 - x0) * k / n)) for k in range(n + 1)]
@@ -213,7 +215,7 @@ def sc_iceberg(t0, s):
                f'<polygon points="380,{sea} 650,{sea} 790,{sea + 250} 700,{sea + 560} 540,{sea + 700} 360,{sea + 520} 300,{sea + 230}" fill="#2B6F8C" opacity=".9"/>')
     f = fig(540, sea - 170, GOLD, .8)
     svg.append('</g>')
-    js.append(f'tl.fromTo("#{ice}",{{y:40,opacity:0}},{{y:0,opacity:1,duration:1,ease:"power2.out"}},{t0 + .2:.2f});')
+    if not SHORT: js.append(f'tl.fromTo("#{ice}",{{y:40,opacity:0}},{{y:0,opacity:1,duration:1,ease:"power2.out"}},{t0 + .2:.2f});')
     items = [x for x in (s.get('items') or []) if x][:4]
     for k, it in enumerate(items):
         yy = sea + 120 + k * 120
@@ -275,8 +277,8 @@ svg.sc{{position:absolute;left:0;top:0;width:{W}px;height:{HT}px}}
 .src{{position:absolute;left:90px;right:90px;top:1120px;text-align:center;font-family:"Mono";font-size:24px;letter-spacing:.08em;color:#8C8496;opacity:0}}
 .save{{position:absolute;left:60px;right:60px;top:1260px;text-align:center;font-family:{FONT};font-weight:700;font-size:{40 if AR else 36}px;color:{GOLD};direction:{"rtl" if AR else "ltr"};opacity:0}}
 .note{{position:absolute;left:90px;right:90px;top:1620px;text-align:center;font-family:{FONT};font-size:{26 if AR else 24}px;color:#8C8496;direction:{"rtl" if AR else "ltr"};opacity:0}}
-.hk{{position:absolute;left:50px;right:50px;top:110px;text-align:center;font-family:{FONT};font-weight:800;font-size:{70 if AR else 64}px;line-height:1.15;color:{WHITE};direction:{"rtl" if AR else "ltr"};text-shadow:0 4px 18px #000}}
-.hk b{{color:{GOLD}}}
+.hk{{position:absolute;left:40px;right:40px;top:90px;padding:22px 26px;border-radius:22px;background:{GOLD};text-align:center;font-family:{FONT};font-weight:900;font-size:{78 if AR else 72}px;line-height:1.12;color:#120E16;direction:{"rtl" if AR else "ltr"};box-shadow:0 10px 40px rgba(0,0,0,.6)}}
+.hk b{{color:#7A1E12}}
 .sh{{position:absolute;left:60px;right:60px;top:1640px;text-align:center;font-family:{FONT};font-weight:800;font-size:{50 if AR else 46}px;color:{GOLD};direction:{"rtl" if AR else "ltr"};opacity:0;text-shadow:0 3px 14px #000}}
 .wm{{position:absolute;left:0;right:0;top:1800px;text-align:center;font-family:"Mono";font-size:20px;letter-spacing:.5em;color:rgba(237,231,218,.28)}}
 '''
@@ -297,10 +299,13 @@ h = [f'<!DOCTYPE html><html lang="{"ar" if AR else "fr"}"><head><meta charset="U
      f'<div class="note" id="note">{esc(job.get("note") or ("للتوعية فقط، لا يعوّض استشارة مختص." if AR else "Information générale : ne remplace pas une consultation."))}</div>',
      '<div class="wm">' + ('د. فهمي' if AR else 'DR FEHMI') + '</div>']
 if SHORT:
-    hk = esc(job.get('hook'))
+    hk = esc(str(job.get('hook') or '').replace('« ', '«\u00a0').replace(' »', '\u00a0»'))
     for w in (job.get('hook_hot') or [])[:2]:
-        if w and esc(w) in hk: hk = hk.replace(esc(w), f'<b>{esc(w)}</b>', 1)
+        w = esc(str(w).replace('« ', '«\u00a0').replace(' »', '\u00a0»'))
+        if w and w in hk: hk = hk.replace(w, f'<b>{w}</b>', 1)
     h.append(f'<div class="hk" id="hk">{hk}</div><div class="sh" id="sh">{esc(job.get("end"))}</div>')
+    js.append('tl.fromTo("svg.sc",{scale:1.18,transformOrigin:"50% 55%"},{scale:1,duration:.7,ease:"expo.out"},0);tl.fromTo("#hk",{scale:1.08},{scale:1,duration:.5,ease:"back.out(2)"},0);')
+    SFX.append(('whoosh', 0, -16))
     js.append(f'tl.fromTo("#sh",{{opacity:0,y:12}},{{opacity:1,y:0,duration:.4}},{END_A - 1.4:.2f});')
     SFX.append(('ding', END_A - 1.3, -18))
 else:
