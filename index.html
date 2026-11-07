@@ -174,7 +174,7 @@ h1{font-size:22px;margin:0}
 <script>
 const API = "https://hook.eu1.make.com/0jj57vomxlae4srwpwj6m74kdrkk24p2";
 // Mise à jour automatique : l'iPhone garde l'ancienne page en cache ; on compare avec la version en ligne et on recharge
-const BUILD = "2026-11-03.2";
+const BUILD = "2026-11-07.1";
 async function checkUpdate() {
   try {
     const t = await (await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" })).text();
@@ -551,7 +551,7 @@ function openPlan(ids) {
     <h2 style="margin:0 0 4px">Tournage de ${ids.length} vidéo${ids.length > 1 ? "s" : ""}</h2>
     <div class="small">Chaque prise gardée part toute seule sur TikTok + YouTube (FR → Tunigeek / Fehmi Tlaies, AR → dr.fehmi / Dr. Fehmi), sans étiquette IA.</div>
     <label>Quand publier ?</label>
-    <select id="pMode"><option value="now">Dès que la vidéo est envoyée</option><option value="daily">Une par jour (par langue), à l'heure choisie</option></select>
+    <select id="pMode"><option value="now">Dès que la vidéo est envoyée</option><option value="daily">Une par jour (par langue), à l'heure choisie</option><option value="lab">🧪 Labo : ne pas publier (Claude monte les accroches)</option></select>
     <label>Heure</label><input type="time" id="pTime" value="${esc(plan.time)}">
     <div class="row" style="margin-top:18px"><button class="ghost" id="pCancel">Annuler</button><button class="pri" id="pGo">Ouvrir la caméra</button></div>
   </div></div>`;
@@ -577,6 +577,7 @@ async function ensureHooks(ids) {
   } catch (e) { toast("Accroches non générées : " + e.message); }
 }
 function publishDate(r, plan) {
+  if (plan.mode === "lab" || /LABO/.test(r.name || "")) return "2099-01-01T08:00:00.000Z";  // labo : envoyée et sous-titrée, jamais publiée telle quelle
   if (plan.mode === "now") return new Date().toISOString();
   const last = store.get("slot." + r.lang, 0);
   const base = new Date(Math.max(Date.now(), last));
