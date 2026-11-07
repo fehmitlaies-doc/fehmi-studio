@@ -1,0 +1,319 @@
+{
+  "generated": "2026-11-07",
+  "app": {
+    "name": "Vague — Arrêter de fumer",
+    "tagline": "Ton coach anti-envie. Une envie de fumer dure 3 à 5 minutes, ton coach dure plus longtemps.",
+    "app_store_url": "https://apps.apple.com/fr/app/id6797004185",
+    "platform": "iOS (iPhone)",
+    "price": {
+      "free": "SOS anti-envie gratuit et sans limite (« SOS seul »)",
+      "premium_annual": "59,99 € par an, après 7 jours d'essai gratuit",
+      "premium_monthly": "8,99 € par mois, sans essai",
+      "note": "Ne jamais écrire « 100 % gratuit » : le plan et le programme sont payants."
+    },
+    "languages": [
+      "fr"
+    ],
+    "languages_note": "L'app n'existe qu'en français. Pas de version arabe : aucune capture arabe n'a été faite.",
+    "top_features": [
+      "SOS anti-envie en un toucher : surfer la vague (3 min), juste respirer (1 min), ancrage 5-4-3-2-1 (2 min)",
+      "Un plan personnel en 2 minutes, sans compte : consommation, moments à risque, raison profonde, ton du coach",
+      "Un programme de 30 jours, un chapitre et une tâche par jour à partir de la date d'arrêt",
+      "La journée et la série : jauge du jour, série de jours, déclaration d'une cigarette sans jugement",
+      "Alertes aux moments à risque et rappels du programme (notifications locales)"
+    ],
+    "audience": "Fumeurs et fumeuses francophones qui veulent arrêter ou réduire, surtout pendant le Mois sans tabac (novembre). Personnes qui ont déjà essayé et redoutent les envies.",
+    "not_a_medical_device": "Vague est un coach de soutien, pas un dispositif médical. Aucune promesse de guérison ni de sevrage garanti."
+  },
+  "demo_data": "Toutes les captures et vidéos viennent d'un build de démonstration (EXPO_PUBLIC_DEMO=1) rempli de données fictives : 15 cigarettes par jour, paquet à 12,50 €, arrêt il y a 11 jours (jour 12 sur 30), série de 12 jours, aucune rechute. Aucune donnée personnelle réelle. Achats désactivés, aucune statistique envoyée.",
+  "health_claims": [
+    {
+      "claim": "Une envie de fumer dure 3 à 5 minutes.",
+      "where": "Écran SOS d'ouverture ; légende de la capture App Store 1",
+      "source": "HSE (service de santé publique irlandais), page « Cravings and withdrawal when you stop smoking » : « Individual cravings usually pass in 3 to 5 minutes. » https://www2.hse.ie/living-well/quit-smoking/get-help-to-quit/cravings-withdrawal/",
+      "strength": "Consigne de santé publique, pas une étude. Le NHS dit seulement que les envies « ne durent en général que quelques minutes ». Dans le programme (jour 1), la phrase est précédée de « le plus souvent ».",
+      "verified": "2026-11-07"
+    },
+    {
+      "claim": "Surfer la vague : « La technique la plus efficace » (sous-titre du bouton SOS).",
+      "where": "Écran SOS",
+      "source": "Bowen et Marlatt, 2009, « Surfing the urge: brief mindfulness-based intervention for college student smokers », Psychology of Addictive Behaviors 23(4).",
+      "strength": "À NE PAS reprendre en vidéo. L'étude soutient l'intérêt de la technique, pas le superlatif « la plus efficace ». Formulation à corriger dans l'app.",
+      "verified": "non vérifié contre la publication ; référence tirée de docs/PROGRAMME-30-JOURS.md"
+    },
+    {
+      "claim": "Le manque est souvent à son plus fort dans les premiers jours, puis il redescend (jour 3, « Les jours les plus durs »).",
+      "where": "Programme, jour 3 ; légende de la capture App Store 5",
+      "source": "Hughes, 2007, « Effects of abstinence from tobacco: valid symptoms and time course », Nicotine & Tobacco Research 9(3).",
+      "strength": "Revue de référence sur le décours du sevrage.",
+      "verified": "non vérifié contre la publication ; référence tirée de docs/PROGRAMME-30-JOURS.md"
+    },
+    {
+      "claim": "Avoir plus faim après l'arrêt est fréquent et normal (jour 12, « L'appétit »).",
+      "where": "Programme, jour 12 (visible sur l'accueil de démo)",
+      "source": "Aubin et al., BMJ 2012 (prise de poids après l'arrêt). Le texte ne donne volontairement aucun chiffre.",
+      "strength": "Étude de cohorte et méta-analyse.",
+      "verified": "non vérifié contre la publication ; référence tirée de src/features/program/content.ts"
+    },
+    {
+      "claim": "Les autres affirmations du programme de 30 jours",
+      "where": "Écrans du programme",
+      "source": "Chaque jour a sa référence dans la colonne « Ancrage » de docs/PROGRAMME-30-JOURS.md et en commentaire dans src/features/program/content.ts (Bouton 2004, Gollwitzer et Sheeran 2006, Cochrane, Parrott 1999, Taylor BMJ 2014, Haasova 2013, etc.).",
+      "strength": "Ne citer en vidéo qu'une affirmation dont la source a été relue."
+    }
+  ],
+  "rules_for_videos": [
+    "Rien de faux : pas de faux témoignage, pas de faux chiffre d'utilisateurs.",
+    "Montrer que les données sont une démonstration si une vidéo affiche la série ou les économies.",
+    "Pas de logo ni de visuel de Santé publique France (#MoisSansTabac en hashtag seulement).",
+    "Lien dans la bio, pas dans la vidéo."
+  ],
+  "files": [
+    {
+      "file": "screenshots/00-ouverture.png",
+      "kind": "screenshot",
+      "shows": "Premier écran d'une installation neuve : « Ça monte ? Je suis là. » et les sessions SOS.",
+      "language": "fr"
+    },
+    {
+      "file": "screenshots/01-accueil.png",
+      "kind": "screenshot",
+      "shows": "Accueil : jauge « Ta journée », série de 12 jours, chapitre du jour 12, bouton « Ça monte ? ».",
+      "language": "fr"
+    },
+    {
+      "file": "screenshots/03-sos-intro.png",
+      "kind": "screenshot",
+      "shows": "Le SOS ouvert depuis l'accueil.",
+      "language": "fr"
+    },
+    {
+      "file": "screenshots/04-session-en-cours.png",
+      "kind": "screenshot",
+      "shows": "Une vague en cours : la vague animée et la consigne du coach.",
+      "language": "fr"
+    },
+    {
+      "file": "screenshots/05-session-coach.png",
+      "kind": "screenshot",
+      "shows": "Plus loin dans la vague : le coach parle, le compte à rebours tourne.",
+      "language": "fr"
+    },
+    {
+      "file": "screenshots/06-session-fin.png",
+      "kind": "screenshot",
+      "shows": "Fin de la vague : écran de victoire.",
+      "language": "fr"
+    },
+    {
+      "file": "screenshots/07-programme.png",
+      "kind": "screenshot",
+      "shows": "Le programme de 30 jours : jours faits cochés, jour 4 et suivants Premium.",
+      "language": "fr"
+    },
+    {
+      "file": "screenshots/08-jour-12.png",
+      "kind": "screenshot",
+      "shows": "Le chapitre du jour 12 (« L'appétit ») et sa tâche.",
+      "language": "fr"
+    },
+    {
+      "file": "screenshots/09-economies.png",
+      "kind": "screenshot",
+      "shows": "Les économies (113 €) — attention : c'est l'écran de résiliation « Ce que tu perds ». À recadrer sur la ligne des économies ou à ne pas utiliser.",
+      "language": "fr"
+    },
+    {
+      "file": "screenshots/10-onboarding-01.png",
+      "kind": "screenshot",
+      "shows": "Plan, étape 1 sur 6 : « Ta consommation » (10 cigarettes par jour, paquet à 12,50 €, « soit 188 € par mois »).",
+      "language": "fr"
+    },
+    {
+      "file": "screenshots/10-onboarding-02.png",
+      "kind": "screenshot",
+      "shows": "Plan, étape 2 : « Tes moments à risque ».",
+      "language": "fr"
+    },
+    {
+      "file": "screenshots/10-onboarding-03.png",
+      "kind": "screenshot",
+      "shows": "Plan, étape 3 : « Ta raison profonde ».",
+      "language": "fr"
+    },
+    {
+      "file": "screenshots/10-onboarding-04.png",
+      "kind": "screenshot",
+      "shows": "Plan, étape 4 : « Le ton de ton coach ».",
+      "language": "fr"
+    },
+    {
+      "file": "screenshots/10-onboarding-05.png",
+      "kind": "screenshot",
+      "shows": "Plan, étape 5 : « Le nom de ta vague » et le résumé du plan.",
+      "language": "fr"
+    },
+    {
+      "file": "screenshots/10-onboarding-06.png",
+      "kind": "screenshot",
+      "shows": "Plan, étape 6 : « Comment tu es arrivé ici ».",
+      "language": "fr"
+    },
+    {
+      "file": "screenshots/10-onboarding-fin-compte.png",
+      "kind": "screenshot",
+      "shows": "Plan prêt : « Garde ton plan », compte facultatif (« Continuer sans compte »).",
+      "language": "fr"
+    },
+    {
+      "file": "screenshots/11-date-d-arret.png",
+      "kind": "screenshot",
+      "shows": "Choisir sa date d'arrêt : aujourd'hui, une date, ou réduire d'abord.",
+      "language": "fr"
+    },
+    {
+      "file": "videos/a-envie-jusqu-a-la-fin.mp4",
+      "kind": "video",
+      "shows": "« Ça monte ? » depuis l'accueil, puis une vague complète (3 minutes réelles, accélérées au milieu) jusqu'à l'écran de victoire.",
+      "language": "fr",
+      "duration_s": 23.5,
+      "size_mb": 3.5,
+      "speed": "temps réel, sauf le milieu de la vague accéléré ×44",
+      "key_moments": [
+        {
+          "t": 1.0,
+          "label": "accueil"
+        },
+        {
+          "t": 2.8,
+          "label": "appui sur Ça monte ?"
+        },
+        {
+          "t": 7.2,
+          "label": "début de la vague (3 min)"
+        },
+        {
+          "t": 12.3,
+          "label": "début de l'accélération ×44 (la vague dure 3 min en réalité)"
+        },
+        {
+          "t": 17.2,
+          "label": "fin de la vague, écran de victoire"
+        },
+        {
+          "t": 20.9,
+          "label": "retour à l'accueil"
+        },
+        {
+          "t": 23.5,
+          "label": "fin"
+        }
+      ]
+    },
+    {
+      "file": "videos/b-progression.mp4",
+      "kind": "video",
+      "shows": "L'accueil (jauge du jour, série de 12 jours), le chapitre du jour 12, puis le programme de 30 jours.",
+      "language": "fr",
+      "duration_s": 16.2,
+      "size_mb": 3.2,
+      "speed": "temps réel",
+      "key_moments": [
+        {
+          "t": 1.0,
+          "label": "accueil : jauge et série de 12 jours"
+        },
+        {
+          "t": 2.7,
+          "label": "carte du jour 12 sur 30"
+        },
+        {
+          "t": 7.0,
+          "label": "chapitre du jour 12"
+        },
+        {
+          "t": 15.1,
+          "label": "programme 30 jours"
+        },
+        {
+          "t": 16.2,
+          "label": "fin"
+        }
+      ]
+    },
+    {
+      "file": "videos/c-onboarding-accelere.mp4",
+      "kind": "video",
+      "shows": "Installation neuve : « Pas d'envie ? Prépare ton arrêt », puis les 7 étapes du plan, accélérées.",
+      "language": "fr",
+      "duration_s": 24.6,
+      "size_mb": 3.0,
+      "speed": "accéléré ×1.1",
+      "key_moments": [
+        {
+          "t": 0.9,
+          "label": "écran d'ouverture"
+        },
+        {
+          "t": 2.4,
+          "label": "appui sur Prépare ton arrêt"
+        },
+        {
+          "t": 5.1,
+          "label": "étape 1"
+        },
+        {
+          "t": 7.7,
+          "label": "étape 2"
+        },
+        {
+          "t": 10.3,
+          "label": "étape 3"
+        },
+        {
+          "t": 13.0,
+          "label": "étape 4"
+        },
+        {
+          "t": 15.6,
+          "label": "étape 5"
+        },
+        {
+          "t": 18.2,
+          "label": "étape 6"
+        },
+        {
+          "t": 21.2,
+          "label": "plan prêt : « Garde ton plan », compte facultatif"
+        },
+        {
+          "t": 23.8,
+          "label": "fin"
+        }
+      ]
+    },
+    {
+      "file": "videos/d-wow-la-vague-respire.mp4",
+      "kind": "video",
+      "shows": "« Ça monte ? Je suis là. » puis la vague qui monte et redescend au rythme du souffle (Juste respirer).",
+      "language": "fr",
+      "duration_s": 23.2,
+      "size_mb": 2.3,
+      "speed": "temps réel",
+      "key_moments": [
+        {
+          "t": 1.0,
+          "label": "écran Ça monte ? Je suis là."
+        },
+        {
+          "t": 2.4,
+          "label": "la vague commence à respirer"
+        },
+        {
+          "t": 22.4,
+          "label": "fin"
+        }
+      ]
+    }
+  ]
+}
