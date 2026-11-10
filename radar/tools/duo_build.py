@@ -2,7 +2,8 @@
 # bonhomme en traits lumineux sur fond noir, deux étiquettes par scène, musique de fond + effets sonores.
 # Scènes : pont, collines, feu, pente, vagues, iceberg, marches. Une carte finale : message + source.
 # Usage : python3 duo_build.py <dossier>
-#   <dossier>/job.json {format:"duo", lang, music, scenes:[{k, title, top, bot}], end, src, save, note}
+#   <dossier>/job.json {format:"duo", lang, music, scenes:[{k, title, top, bot}], end, src, save, note, look}
+#   look:"vif" (option) : trait qui vit, caméra toujours en mouvement, phrase de fin mot à mot, barre de progression, bruitages en plus
 # Sortie : index.html, assets/mix.m4a
 import json, math, os, subprocess, sys, html as H
 
@@ -19,6 +20,7 @@ LEN = {'pont': 8.5, 'collines': 8.5, 'feu': 8.0, 'pente': 8.5, 'vagues': 7.5, 'i
 TOPY, BOTY = 360, 1060  # haut de chaque panneau (600 px de haut)
 FONT = '"Cairo-ar"' if AR else '"Archivo"'
 
+VIF = job.get('look') == 'vif'  # option « vif » : trait qui vit, caméra en mouvement continu, phrase de fin mot à mot, barre de progression, bruitages en plus
 SHORT = bool(job.get('short'))  # boucle courte : une accroche en haut dès la 1re image, pas de carte finale
 starts, t = [], (0 if SHORT else .3)
 for s in scenes: starts.append(t); t += LEN[s['k']]
@@ -266,6 +268,7 @@ for i, s in enumerate(scenes):
         js.append(f'tl.set("#{sep}",{{opacity:1}},{t0:.2f});tl.set("#{sep}",{{opacity:0}},{t1:.2f});')
 
 if not SHORT: SFX.append(('riser', END_A - 1.2, -22)); SFX.append(('ding', END_A + .3, -17))
+VIFCSS = (f'.sh .w{{display:inline-block;margin:0 .14em}}.pbar{{position:absolute;left:0;bottom:0;width:{W}px;height:12px;background:{GOLD};z-index:5}}.vig{{position:absolute;left:0;top:0;width:{W}px;height:{HT}px;background:radial-gradient(ellipse at 50% 50%,rgba(0,0,0,0) 58%,rgba(0,0,0,.45) 100%);pointer-events:none}}\n' if VIF else '')
 css = f'''
 @font-face{{font-family:"Archivo";src:url(assets/Archivo.ttf)}}@font-face{{font-family:"Cairo-ar";src:url(assets/Cairo-ar.ttf)}}@font-face{{font-family:"Mono";src:url(assets/Mono.ttf)}}
 html,body{{margin:0;background:#050407}}#root{{position:relative;width:{W}px;height:{HT}px;overflow:hidden;background:radial-gradient(ellipse at 50% 40%,#141118 0%,#060508 70%)}}
@@ -280,11 +283,12 @@ svg.sc{{position:absolute;left:0;top:0;width:{W}px;height:{HT}px}}
 .hk{{position:absolute;left:40px;right:40px;top:90px;padding:22px 26px;border-radius:22px;background:{GOLD};text-align:center;font-family:{FONT};font-weight:900;font-size:{78 if AR else 72}px;line-height:1.12;color:#120E16;direction:{"rtl" if AR else "ltr"};box-shadow:0 10px 40px rgba(0,0,0,.6)}}
 .hk b{{color:#7A1E12}}
 .sh{{position:absolute;left:60px;right:60px;top:1640px;text-align:center;font-family:{FONT};font-weight:800;font-size:{50 if AR else 46}px;color:{GOLD};direction:{"rtl" if AR else "ltr"};opacity:0;text-shadow:0 3px 14px #000}}
-.wm{{position:absolute;left:0;right:0;top:1800px;text-align:center;font-family:"Mono";font-size:20px;letter-spacing:.5em;color:rgba(237,231,218,.28)}}
+{VIFCSS}.wm{{position:absolute;left:0;right:0;top:1800px;text-align:center;font-family:"Mono";font-size:20px;letter-spacing:.5em;color:rgba(237,231,218,.28)}}
 '''
 defs = ('<defs><filter id="gl" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>'
         f'<linearGradient id="water" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3E8FB0" stop-opacity=".75"/><stop offset="1" stop-color="#0B1A22" stop-opacity="0"/></linearGradient>'
-        '<linearGradient id="deep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0E2A38"/><stop offset="1" stop-color="#050407"/></linearGradient></defs>')
+        '<linearGradient id="deep" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0E2A38"/><stop offset="1" stop-color="#050407"/></linearGradient>'
+        + ('<filter id="boil" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence id="turb" type="fractalNoise" baseFrequency="0.02" numOctaves="2" seed="1" result="n"/><feDisplacementMap in="SourceGraphic" in2="n" scale="5" xChannelSelector="R" yChannelSelector="G"/></filter>' if VIF else '') + '</defs>')
 mirror = f' transform="translate({W},0) scale(-1,1)"' if AR else ''
 endtxt = esc(job.get('end'))
 for w in (job.get('hot') or [])[:2]:
@@ -292,7 +296,7 @@ for w in (job.get('hot') or [])[:2]:
 h = [f'<!DOCTYPE html><html lang="{"ar" if AR else "fr"}"><head><meta charset="UTF-8"><script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script><style>{css}</style></head><body>',
      f'<div id="root" data-composition-id="main" data-width="{W}" data-height="{HT}" data-start="0" data-duration="{END:.2f}">',
      f'<audio id="mix" data-start="0" data-duration="{END:.2f}" data-track-index="1" src="assets/mix.m4a"></audio>',
-     f'<svg class="sc" viewBox="0 0 {W} {HT}">{defs}<g{mirror}>' + ''.join(svg) + '</g></svg>',
+     f'<svg class="sc" viewBox="0 0 {W} {HT}">{defs}<g{mirror}>' + ('<g filter="url(#boil)">' if VIF else '') + ''.join(svg) + ('</g>' if VIF else '') + '</g></svg>',
      *labels, *titles,
      f'<div class="end" id="end">{endtxt}</div><div class="src" id="src">{esc(job.get("src"))}</div>',
      f'<div class="save" id="save">{esc(job.get("save") or ("احفظ الفيديو وأرسله لمن يحتاجه." if AR else "Enregistre-la. Envoie-la à quelqu'un."))}</div>',
@@ -303,15 +307,28 @@ if SHORT:
     for w in (job.get('hook_hot') or [])[:2]:
         w = esc(str(w).replace('« ', '«\u00a0').replace(' »', '\u00a0»'))
         if w and w in hk: hk = hk.replace(w, f'<b>{w}</b>', 1)
-    h.append(f'<div class="hk" id="hk">{hk}</div><div class="sh" id="sh">{esc(job.get("end"))}</div>')
+    shtxt = ' '.join(f'<span class="w">{esc(w)}</span>' for w in str(job.get('end') or '').split()) if VIF else esc(job.get('end'))
+    h.append(f'<div class="hk" id="hk">{hk}</div><div class="sh" id="sh">{shtxt}</div>')
     js.append('tl.fromTo("svg.sc",{scale:1.18,transformOrigin:"50% 55%"},{scale:1,duration:.7,ease:"expo.out"},0);tl.fromTo("#hk",{scale:1.08},{scale:1,duration:.5,ease:"back.out(2)"},0);')
     SFX.append(('whoosh', 0, -16))
-    js.append(f'tl.fromTo("#sh",{{opacity:0,y:12}},{{opacity:1,y:0,duration:.4}},{END_A - 1.4:.2f});')
-    SFX.append(('ding', END_A - 1.3, -18))
+    if VIF:
+        nw = max(1, len(str(job.get('end') or '').split())); T_SH = max(1.2, END_A - 1.4 - nw * .16)
+        js.append(f'tl.set("#sh",{{opacity:1}},{T_SH:.2f});tl.from("#sh .w",{{opacity:0,y:26,scale:.6,duration:.22,ease:"back.out(2.4)",stagger:.16}},{T_SH:.2f});')
+        js.append(f'tl.to("svg.sc",{{scale:1.07,transformOrigin:"50% 55%",duration:{END - .7:.2f},ease:"none"}},.7);')
+        js.append(f'tl.to("#hk",{{scale:1.03,duration:.5,yoyo:true,repeat:{max(1, int((END - 1) / .5)) | 1},ease:"sine.inOut"}},.6);')
+        SFX.append(('impact', 0, -18)); SFX.append(('riser', max(0, T_SH - 1.6), -24)); SFX.append(('pop', T_SH, -16)); SFX.append(('ding', T_SH + nw * .16, -18))
+    else:
+        js.append(f'tl.fromTo("#sh",{{opacity:0,y:12}},{{opacity:1,y:0,duration:.4}},{END_A - 1.4:.2f});')
+        SFX.append(('ding', END_A - 1.3, -18))
 else:
     js.append(f'tl.fromTo("#end",{{opacity:0,scale:.96}},{{opacity:1,scale:1,duration:.7,ease:"expo.out"}},{END_A + .2:.2f});')
     js.append(f'tl.fromTo("#src",{{opacity:0}},{{opacity:1,duration:.5}},{END_A + 1.2:.2f});tl.fromTo("#save",{{opacity:0,y:10}},{{opacity:1,y:0,duration:.5}},{END_A + 1.8:.2f});tl.fromTo("#note",{{opacity:0}},{{opacity:1,duration:.5}},{END_A + 2.2:.2f});')
     js.append(f'tl.to(["#end","#src","#save","#note"],{{opacity:0,duration:.6}},{END - .7:.2f});')
+if VIF:
+    h.append('<div class="vig"></div><div class="pbar" id="pbar"></div>')
+    js.append(f'tl.to("#turb",{{attr:{{seed:{int(END * 6) + 1}}},duration:{END:.2f},ease:"steps({int(END * 6)})"}},0);')
+    js.append(f'tl.fromTo("#pbar",{{scaleX:0,transformOrigin:"{"100%" if AR else "0%"} 50%"}},{{scaleX:1,duration:{END:.2f},ease:"none"}},0);')
+    if not SHORT: js.append(f'tl.to("svg.sc",{{scale:1.05,transformOrigin:"50% 50%",duration:{END:.2f},ease:"none"}},0);')
 js.append('window.__timelines["main"]=tl;')
 h.append('</div><script>' + '\n'.join(js) + '</script></body></html>')
 open(f'{D}/index.html', 'w').write('\n'.join(h))
