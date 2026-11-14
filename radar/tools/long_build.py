@@ -254,6 +254,8 @@ for i, p in enumerate(plans):
         js.append(f'tl.set("#t{i}",{{opacity:0}},{b:.2f});tl.set("#i{i}",{{opacity:0}},{b + (0 if same_next or i + 1 in chap_start else fu):.2f});')
     pw = [w for w in words if w['p'] == i]
     g = p.get('gfx') or 'none'
+    if g == 'count' and int(p.get('count') or 3) > 5:  # « 7 عادات », « 20 تجربة » : le nombre en grand (les pastilles s'arrêtent à 5)
+        g, p = 'bigword', {**p, 'word': str(p['count'])}
     if g == 'ring':  # anneau ambre qui se dessine pendant le plan
         h.append(f'<svg class="g" id="ring{i}" style="top:140px;left:{IL - 20}px;width:800px;height:800px" viewBox="0 0 800 800"><circle cx="400" cy="400" r="380" fill="none" stroke="#F2A541" stroke-width="6" stroke-linecap="round" stroke-dasharray="2388" stroke-dashoffset="2388" transform="rotate(-90 400 400)"/></svg>')
         SFX.append(('riser', max(0, b - 2.2), -20))
@@ -312,7 +314,7 @@ for i, p in enumerate(plans):
             js.append(f'tl.from("#ck{i}_{k}",{{opacity:0,x:{40 if AR else -40},duration:.3,ease:"back.out(1.8)"}},{t0:.2f});')
             SFX.append(('pop', t0, -15))
     elif g == 'split' and p.get('left') and p.get('right'):  # avant / après, mythe / vérité
-        L, Rr = p['left'], p['right']
+        L, Rr = [{'t': x} if isinstance(x, str) else x for x in (p['left'], p['right'])]  # texte simple accepté (fiches des vidéos AR n° 3-5)
         h.append(f'<div class="split"><div class="sl" id="sl{i}"><small>{H.escape(str(L.get("label", "")))}</small><p>{H.escape(str(L.get("t", "")))}</p></div><div class="sr" id="sr{i}"><small>{H.escape(str(Rr.get("label", "")))}</small><p>{H.escape(str(Rr.get("t", "")))}</p></div></div>')
         t1 = a + .3; t2 = a + max(.9, (b - a) * .45)
         js.append(f'tl.fromTo("#sl{i}",{{opacity:0,y:30}},{{opacity:1,y:0,duration:.35,ease:"power3.out"}},{t1:.2f});tl.fromTo("#sr{i}",{{opacity:0,scale:.8}},{{opacity:1,scale:1,duration:.45,ease:"back.out(2)"}},{t2:.2f});')
