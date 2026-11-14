@@ -80,6 +80,14 @@ h1{font-size:22px;margin:0}
 .vbox .vplay{width:100%;padding:10px}
 .links a{color:#8fb8ff;margin-right:10px;word-break:break-all}
 #hookPrev{position:absolute;left:8%;right:8%;top:22%;text-align:center;font-weight:900;font-size:30px;line-height:1.25;pointer-events:none;display:none}
+/* mode paysage (16:9, vidéo longue) : prompteur en haut, du côté de la caméra avant */
+#stage.land #prompt{height:48%;width:56%}
+#stage.land.camL #prompt{left:0;right:auto}
+#stage.land.camR #prompt{left:auto;right:0}
+#stage.land #guide{width:56%}
+#stage.land.camR #guide{left:auto;right:0}
+#stage.land #hookPrev,#stage.land #hookChip{display:none!important}
+#turn{position:absolute;inset:0;display:none;place-items:center;text-align:center;padding:24px;font-size:22px;font-weight:700;background:rgba(0,0,0,.78);color:#ffe14d;pointer-events:none;z-index:2}
 #hookPrev span{background:#ffe14d;color:#111;padding:2px 10px;border-radius:8px;box-decoration-break:clone;-webkit-box-decoration-break:clone}
 #hookChip{background:rgba(255,225,77,.16);border:1px solid #ffe14d;color:#ffe14d;border-radius:10px;padding:6px 10px;font-size:13px;text-align:left}
 #fx{position:fixed;inset:0;background:#000;z-index:45;display:none}
@@ -132,6 +140,7 @@ h1{font-size:22px;margin:0}
   <div id="guide"></div>
   <div id="count"></div>
   <div id="hookPrev" dir="auto"></div>
+  <div id="turn">↻ Tourne le téléphone à l'horizontale<br><span style="font-size:15px;color:#fff;font-weight:400">(format paysage choisi ; verrou de rotation désactivé)</span></div>
   <div id="info" hidden></div>
   <div id="hud">
     <div class="hudtop"><span id="hTitle"></span><span id="hPos"></span></div>
@@ -174,7 +183,7 @@ h1{font-size:22px;margin:0}
 <script>
 const API = "https://hook.eu1.make.com/0jj57vomxlae4srwpwj6m74kdrkk24p2";
 // Mise à jour automatique : l'iPhone garde l'ancienne page en cache ; on compare avec la version en ligne et on recharge
-const BUILD = "2026-11-07.1";
+const BUILD = "2026-11-14.1";
 async function checkUpdate() {
   try {
     const t = await (await fetch(location.pathname + "?v=" + Date.now(), { cache: "no-store" })).text();
@@ -549,18 +558,25 @@ function openPlan(ids) {
   const plan = store.get("plan", { mode: "now", time: "18:00" });
   $("#sheet").innerHTML = `<div class="sheet"><div>
     <h2 style="margin:0 0 4px">Tournage de ${ids.length} vidéo${ids.length > 1 ? "s" : ""}</h2>
-    <div class="small">Chaque prise gardée part toute seule sur TikTok + YouTube (FR → Tunigeek / Fehmi Tlaies, AR → dr.fehmi / Dr. Fehmi), sans étiquette IA.</div>
+    <div class="small">Publication automatique (TikTok + YouTube : FR → Tunigeek / Fehmi Tlaies, AR → dr.fehmi / Dr. Fehmi, sans étiquette IA) OU Labo (rien n'est publié) : voir le choix ci-dessous.</div>
     <label>Quand publier ?</label>
     <select id="pMode"><option value="now">Dès que la vidéo est envoyée</option><option value="daily">Une par jour (par langue), à l'heure choisie</option><option value="lab">🧪 Labo : ne pas publier (Claude monte les accroches)</option></select>
     <label>Heure</label><input type="time" id="pTime" value="${esc(plan.time)}">
+    <label>Format de la prise</label>
+    <select id="pFmt"><option value="v">Vertical 9:16 (shorts, habituel)</option><option value="h">Paysage 16:9 (vidéo longue YouTube, téléphone à l'horizontale)</option></select>
+    <div class="small" id="pNote" style="margin-top:8px"></div>
     <div class="row" style="margin-top:18px"><button class="ghost" id="pCancel">Annuler</button><button class="pri" id="pGo">Ouvrir la caméra</button></div>
   </div></div>`;
-  $("#pMode").value = plan.mode;
+  $("#pMode").value = plan.mode; $("#pFmt").value = plan.fmt === "h" ? "h" : "v";
+  const note = () => { const lab = $("#pMode").value === "lab";
+    $("#pNote").textContent = lab ? "🧪 Labo : chaque prise est envoyée à Dropbox (brute, sans texte incrusté) pour le montage de Claude. Rien n'est publié." : "⚠️ Hors Labo : chaque prise gardée part toute seule sur TikTok + YouTube à l'heure choisie.";
+    $("#pTime").disabled = lab; };
+  $("#pMode").onchange = note; note();
   $("#pCancel").onclick = () => $("#sheet").innerHTML = "";
   $("#pGo").onclick = async () => {
-    const p = { mode: $("#pMode").value, time: $("#pTime").value || "18:00" }; store.set("plan", p);
-    const b = $("#pGo"); b.disabled = true; b.textContent = "Claude prépare les accroches…";
-    await ensureHooks(ids);
+    const p = { mode: $("#pMode").value, time: $("#pTime").value || "18:00", fmt: $("#pFmt").value }; store.set("plan", p);
+    const b = $("#pGo"); b.disabled = true;
+    if (!isLab(p)) { b.textContent = "Claude prépare les accroches…"; await ensureHooks(ids); }  // Labo : prise brute, aucune accroche incrustée
     $("#sheet").innerHTML = ""; startShoot(ids, p);
   };
 }
@@ -576,6 +592,9 @@ async function ensureHooks(ids) {
     }));
   } catch (e) { toast("Accroches non générées : " + e.message); }
 }
+// Labo : prise brute pour le montage de Claude (jamais publiée, aucune accroche incrustée)
+const isLab = (plan, r) => plan?.mode === "lab" || /LABO/.test(r?.name || "");
+const isLand = () => !P.audio && P.plan?.fmt === "h";
 function publishDate(r, plan) {
   if (plan.mode === "lab" || /LABO/.test(r.name || "")) return "2099-01-01T08:00:00.000Z";  // labo : envoyée et sous-titrée, jamais publiée telle quelle
   if (plan.mode === "now") return new Date().toISOString();
@@ -594,9 +613,11 @@ function pickMime() {
 }
 async function startShoot(ids, plan, audio = false) {
   if (!window.MediaRecorder || !navigator.mediaDevices?.getUserMedia) { toast("Ce navigateur ne peut pas enregistrer. Ouvre le Studio dans Safari."); return; }
-  Object.assign(P, { ids, i: 0, plan, audio });
+  Object.assign(P, { ids, i: 0, plan, audio, full: false });
+  if (!audio) P.rows = S.rows.filter(r => ids.includes(r.id));  // copie : une fiche envoyée reste disponible pour la suite d'une partie
   $("#stage").classList.toggle("audio", audio);
-  $("#rKeep").textContent = audio ? "✓ Garder → montage" : "✓ Garder & publier";
+  $("#rKeep").textContent = audio ? "✓ Garder → montage" : isLab(plan) ? "✓ Garder (Labo : envoyée, pas publiée)" : "✓ Garder & publier";
+  $("#stage").classList.toggle("land", isLand()); camSide();
   if (!await openCam()) return;
   $("#stage").classList.add("on");
   try { P.lock = await navigator.wakeLock?.request("screen"); } catch {}
@@ -658,7 +679,7 @@ function drawHook(x, W, H, el) {
   x.restore();
 }
 function compose() {
-  const v = $("#cam"), W = 1080, H = 1920, x = C.x;
+  const v = $("#cam"), W = C.cv.width, H = C.cv.height, x = C.x;
   if (v.videoWidth) {
     const s = Math.max(W / v.videoWidth, H / v.videoHeight), w = v.videoWidth * s, h = v.videoHeight * s;
     x.drawImage(v, (W - w) / 2, (H - h) / 2, w, h);
@@ -670,8 +691,9 @@ function compose() {
 }
 function recStream(r) {
   if (P.audio || !canComposite()) return P.stream;
-  if (!C.cv) { C.cv = document.createElement("canvas"); C.cv.width = 1080; C.cv.height = 1920; C.x = C.cv.getContext("2d"); }
-  C.hook = (r.hook || "").trim(); C.ar = isAr(r); C.t0 = performance.now(); C.on = true; compose();
+  if (!C.cv) { C.cv = document.createElement("canvas"); C.x = C.cv.getContext("2d"); }
+  const land = isLand(); C.cv.width = land ? 1920 : 1080; C.cv.height = land ? 1080 : 1920;  // paysage : 16:9 natif pour la vidéo longue
+  C.hook = isLab(P.plan, r) || land ? "" : (r.hook || "").trim(); C.ar = isAr(r); C.t0 = performance.now(); C.on = true; compose();
   return new MediaStream([...C.cv.captureStream(30).getVideoTracks(), ...P.stream.getAudioTracks()]);
 }
 function stopCompose() { C.on = false; cancelAnimationFrame(C.raf); $("#hookPrev").style.display = "none"; }
@@ -685,14 +707,14 @@ $("#hookChip").onclick = async () => {
   r.hook = h.trim(); showHook(r);
   try { await api("update", { id: r.id, props: JSON.stringify({ "Texte écran": rt(r.hook) }) }); } catch (e) { toast(e.message); }
 };
-function showTake() {
+function showTake(suite = false) {  // suite = même fiche après un fichier plein : le prompteur reste où il était
   const r = cur(); if (!r) return closeShoot();
   $("#hTitle").textContent = r.name; $("#hPos").textContent = `${P.i + 1}/${P.ids.length}`;
   const t = $("#ptext"); t.textContent = r.script; t.className = isAr(r) ? "ar" : ""; t.dir = isAr(r) ? "rtl" : "ltr";
-  t.style.fontSize = P.font + "px"; P.y = 0; t.style.transform = "translateY(0)"; calibrate();
+  t.style.fontSize = P.font + "px"; if (!suite) { P.y = 0; t.style.transform = "translateY(0)"; } calibrate();
   $("#play").style.display = "none"; $("#play").removeAttribute("src"); $("#cam").style.display = "block";
   $("#prompt").style.display = "block"; $("#live").style.display = "block"; $("#review").style.display = "none";
-  $("#rec").classList.remove("on"); $("#info").hidden = true; showHook(r); $("#hookChip").style.display = "";
+  $("#rec").classList.remove("on"); $("#info").hidden = true; showHook(r); $("#hookChip").style.display = isLab(P.plan, r) ? "none" : "";
 }
 function scrollLoop(ts) {
   if (!P.last) P.last = ts;
@@ -701,7 +723,13 @@ function scrollLoop(ts) {
     const t = $("#ptext"); const max = Math.max(0, t.scrollHeight - $("#prompt").clientHeight);
     P.y = Math.min(max, P.y + P.speed * dt); t.style.transform = `translateY(${-P.y}px)`;
   }
-  if (P.rec) { const s = Math.floor((Date.now() - P.t0) / 1000); $("#info").innerHTML = `<span class="dot"></span>${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
+  if (P.rec) {
+    const s = Math.floor((Date.now() - P.t0) / 1000), mo = Math.round(P.bytes / 1048576), lim = MAX_BYTES / 1048576;
+    $("#info").innerHTML = `<span class="dot"></span>${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}${P.audio ? "" : ` · ${mo}/${Math.round(lim)} Mo`}`;
+    $("#info").style.background = !P.audio && P.bytes > MAX_BYTES * 0.8 ? "rgba(200,90,0,.85)" : "";
+    if (!P.audio && P.bytes > MAX_BYTES * 0.8 && !P.warned) { P.warned = true; toast("Fichier bientôt plein : termine ta phrase.", 4000); }
+    if (!P.audio && P.bytes > MAX_BYTES * 0.93 && P.rec.state === "recording") { P.full = true; P.rec.stop(); }  // limite d'envoi Dropbox : arrêt propre avant 150 Mo
+  }
   P.raf = requestAnimationFrame(scrollLoop);
 }
 P.raf = requestAnimationFrame(scrollLoop);
@@ -710,10 +738,20 @@ async function countdown() {
   for (const n of [3, 2, 1]) { c.textContent = n; await new Promise(r => setTimeout(r, 800)); }
   c.style.display = "none";
 }
+// paysage : côté de la caméra avant (pour y placer le prompteur) et téléphone bien à l'horizontale
+function camSide() {
+  const a = (screen.orientation && screen.orientation.angle) ?? window.orientation ?? 0;
+  $("#stage").classList.toggle("camL", a === 90); $("#stage").classList.toggle("camR", a === 270 || a === -90);
+  const v = $("#cam"), wrong = isLand() && !P.rec && (innerWidth < innerHeight || (v.videoWidth > 0 && v.videoWidth < v.videoHeight));  // page verticale = verrou de rotation ou téléphone debout
+  $("#turn").style.display = wrong ? "grid" : "none"; return !wrong;
+}
+addEventListener("resize", () => { if ($("#stage").classList.contains("on")) camSide(); });
+$("#cam").addEventListener("loadedmetadata", () => camSide());
 $("#rec").onclick = async () => {
   if (P.rec) { P.rec.stop(); return; }
+  if (!camSide()) { toast("Format paysage : tourne le téléphone à l'horizontale avant d'enregistrer.", 4000); return; }
   await countdown();
-  P.mime = pickMime(); P.chunks = [];
+  P.mime = pickMime(); P.chunks = []; P.bytes = 0; P.warned = false; P.full = false;
   const src = recStream(cur());
   if (src === P.stream && cur()?.hook) toast("Ce navigateur ne permet pas l'incrustation : la vidéo part sans texte.");
   try { P.rec = new MediaRecorder(src, P.mime ? (P.audio ? { mimeType: P.mime, audioBitsPerSecond: 192_000 } : { mimeType: P.mime, videoBitsPerSecond: 6_000_000 }) : undefined); }
@@ -721,9 +759,10 @@ $("#rec").onclick = async () => {
   $("#hookChip").style.display = "none";
   P.mime = P.rec.mimeType || P.mime || "video/mp4";
   if (!P.audio && /opus|vp8|vp9|webm/i.test(P.mime)) toast("⚠️ Ce navigateur enregistre un son illisible sur iPhone : utilise Safari sur iPhone.", 6000);
-  P.rec.ondataavailable = e => e.data.size && P.chunks.push(e.data);
+  P.rec.ondataavailable = e => { if (e.data.size) { P.chunks.push(e.data); P.bytes += e.data.size; } };
   P.rec.onstop = () => {
     stopCompose(); P.blob = new Blob(P.chunks, { type: P.mime }); P.rec = null; P.run = false;
+    if (P.full) toast("Fichier plein (150 Mo) : garde cette prise, puis continue la MÊME partie à la phrase suivante.", 7000);
     $("#rec").classList.remove("on"); $("#info").hidden = true;
     const v = $("#play"); v.src = URL.createObjectURL(P.blob); v.style.display = "block"; $("#cam").style.display = "none";
     $("#prompt").style.display = "none"; $("#live").style.display = "none"; $("#review").style.display = "flex";
@@ -749,6 +788,7 @@ $("#rKeep").onclick = () => {
   if (P.audio) { const blob = P.blob, mime = P.mime; P.blob = null; P.i = P.ids.length; closeShoot(); renderR7(r, { blob, mime }); return; }
   if (P.blob.size > MAX_BYTES) { toast("Vidéo trop lourde (> 150 Mo). Refais une prise plus courte."); return; }
   enqueue(r, P.blob, P.mime, publishDate(r, P.plan));
+  if (P.full && isLab(P.plan, r)) { P.blob = null; P.full = false; toast("Prise envoyée. Continue la même partie (2e fichier).", 4000); showTake(true); return; }
   S.sel.delete(r.id); P.blob = null; P.i++;
   if (P.i >= P.ids.length) { closeShoot(); toast("Lot terminé — l'envoi continue en bas de la liste."); } else showTake();
 };
@@ -756,7 +796,7 @@ function closeShoot() {
   if (P.rec) return;
   P.stream?.getTracks().forEach(t => t.stop()); P.stream = null;
   try { P.lock?.release(); } catch {}
-  $("#stage").classList.remove("on", "audio"); P.audio = false; P.rows = null; P.onKeep = null; render();
+  $("#stage").classList.remove("on", "audio", "land", "camL", "camR"); $("#turn").style.display = "none"; P.audio = false; P.rows = null; P.onKeep = null; render();
 }
 
 /* ---------- file d'envoi : Dropbox puis programmation Notion ---------- */
@@ -1833,7 +1873,9 @@ function openLong(r) {
     await startShoot([P.rows[0].id], store.get("plan", { mode: "now", time: "18:00" }), true);
     $("#rKeep").textContent = "✓ Garder ce chapitre";
   });
-  $("#lGo").onclick = () => { keep(); $("#sheet").innerHTML = ""; renderLong(r); };
+  $("#lGo").onclick = () => {
+    if (fx.pilot && !confirm("Cette vidéo est montée par l'agent Contenu (Claude), pas par ce bouton.\nTa voix est déjà enregistrée : tu peux fermer.\n\nLancer quand même le montage automatique ?")) return;
+    keep(); $("#sheet").innerHTML = ""; renderLong(r); };
 }
 async function saveChapterVoice(r, k, blob, mime) {
   toast("Envoi de la voix du chapitre…", 15000);
@@ -1965,11 +2007,14 @@ async function drawThumb(r, text, hl, pose) {
   return c;
 }
 // 4. publication YouTube (chaîne de la langue) à la date choisie
+// Titre YouTube = Name de la fiche : on retire le préfixe interne « N°3 Dr Fehmi AR — » / « PILOTE … — » avant toute programmation
+const ytTitle = n => String(n || "").replace(/^\s*(?:N°\s*\d+|PILOTE)[^—]*—\s*/u, "").trim();
 function publishLong(r) {
+  if (r.fx?.pilot && !confirm("Vidéo de la chaîne suivie par l'agent Contenu : il la programme lui-même après contrôle qualité et ton accord.\n\nProgrammer quand même ici ?")) return;
   const d0 = new Date(); d0.setDate(d0.getDate() + 1); d0.setHours(18, 0, 0, 0);
   $("#sheet").innerHTML = `<div class="sheet"><div>
-    <h2 style="margin:0 0 4px" dir="auto">${esc(r.name)}</h2>
-    <div class="small">Publiée sur YouTube seulement (chaîne ${isPro(r) ? "Fehmi Tlaies, IA pour thérapeutes" : isAr(r) ? "Dr Fehmi AR" : "Fehmi Tlaies FR"}), avec les chapitres dans la description. Titre, description et date restent modifiables dans 📊 Suivi.</div>
+    <h2 style="margin:0 0 4px" dir="auto">${esc(ytTitle(r.name))}</h2>
+    <div class="small">Titre YouTube ci-dessus (préfixe « N°… — » retiré). Publiée sur YouTube seulement (chaîne ${isPro(r) ? "Fehmi Tlaies, IA pour thérapeutes" : isAr(r) ? "Dr Fehmi AR" : "Fehmi Tlaies FR"}), avec les chapitres dans la description. Titre, description et date restent modifiables dans 📊 Suivi.</div>
     <label>Miniature</label><div id="tPrev" style="aspect-ratio:16/9;border-radius:12px;overflow:hidden;background:#17121C"></div>
     <div class="row"><div style="flex:2"><label>Texte (2 à 4 mots)</label><input id="tText" dir="auto" maxlength="40" value="${esc(thumbText(r))}"></div>
       <div><label>Mot en ambre</label><input id="tHl" dir="auto" maxlength="20" value="${esc(r.fx.hl || "")}"></div></div>
@@ -1997,7 +2042,8 @@ function publishLong(r) {
       try { await redraw(); thumb = await pfmUpload(await new Promise(ok => cv.toBlob(ok, "image/jpeg", .9))); } catch { toast("Miniature non envoyée : YouTube prendra une image de la vidéo.", 5000); }
       b.textContent = "Programmation…";
       const tags = String(r.fx.tags || "").split(/[,،]/).map(t => t.trim().replace(/^#/, "")).filter(Boolean).slice(0, 15);
-      await api("update", { id: r.id, props: JSON.stringify({ "Thumbnail URL": { url: thumb }, "Tags YouTube": rt(JSON.stringify(tags)), "Scènes": rt(JSON.stringify(r.fx)), Production: { select: { name: "Visuels IA" } }, Type: { select: { name: "Video Long" } }, "Pipeline Stage": { select: { name: "Scheduled" } }, "Statut publication": { select: { name: "En attente" } }, "Publish Date": { date: { start: d.toISOString() } } }) });
+      const title = ytTitle(r.name); if (title && title !== r.name) r.name = title;
+      await api("update", { id: r.id, props: JSON.stringify({ Name: { title: [{ text: { content: title || r.name } }] }, "Thumbnail URL": { url: thumb }, "Tags YouTube": rt(JSON.stringify(tags)), "Scènes": rt(JSON.stringify(r.fx)), Production: { select: { name: "Visuels IA" } }, Type: { select: { name: "Video Long" } }, "Pipeline Stage": { select: { name: "Scheduled" } }, "Statut publication": { select: { name: "En attente" } }, "Publish Date": { date: { start: d.toISOString() } } }) });
       rx.del(r.id); S.rows = S.rows.filter(x => x.id !== r.id); $("#sheet").innerHTML = ""; render();
       toast(`Programmée pour ${fmtDate(d)} sur YouTube.`, 5000);
     } catch (e) { b.disabled = false; b.textContent = "🚀 Programmer"; toast(e.message); }
